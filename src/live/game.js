@@ -35,6 +35,7 @@ export class HostGame {
     this.log = [];
     this.startedAt = null;
     this.endedAt = null;
+    this.revealed = false; // a tanár felfedte a teljes megoldást
     this.now = () => Date.now();
   }
 
@@ -61,9 +62,10 @@ export class HostGame {
         : {},
       bands: this.puzzle.bands.map((b, k) => ({
         solvedBy: this.bandSolvedBy[k] ?? null,
-        tokens: shared && (this.bandSolvedBy[k] || this.status === 'ended') ? b.tokens : null,
+        tokens: (shared && this.bandSolvedBy[k]) || this.status === 'ended' || this.revealed ? b.tokens : null,
       })),
-      revealAll: this.status === 'ended' ? this.puzzle.rows.map((r) => r.tokens) : null,
+      revealed: this.revealed,
+      revealAll: this.status === 'ended' || this.revealed ? this.puzzle.rows.map((r) => r.tokens) : null,
       turn: this.turn
         ? { n: this.turn.n, playerId: this.turn.playerId, remainingMs: this.turn.endsAt ? Math.max(0, this.turn.endsAt - this.now()) : null }
         : null,
@@ -143,7 +145,7 @@ export class HostGame {
 
   onGuess({ id, row, tokens }) {
     const pl = this.players.get(id);
-    if (!pl || this.status !== 'playing') return;
+    if (!pl || this.status !== 'playing' || this.revealed) return;
     row = Number(row);
     if (!(row >= 0 && row < this.puzzle.rows.length)) return;
 
@@ -174,7 +176,7 @@ export class HostGame {
 
   onSolution({ id, band, text }) {
     const pl = this.players.get(id);
-    if (!pl || this.status !== 'playing') return;
+    if (!pl || this.status !== 'playing' || this.revealed) return;
     band = Number(band);
     const b = this.puzzle.bands[band];
     if (!b) return;
@@ -260,6 +262,14 @@ export class HostGame {
   revealRow(row) {
     if (this.mode === 'race' || this.solved[row]) return;
     this.solved[row] = { by: null };
+    this.broadcast();
+  }
+
+  /** A teljes megoldás felfedése: a meg nem fejtett sorok és a megfejtés(ek) kitöltése mindenkinél. */
+  revealSolution() {
+    if (this.revealed) return;
+    this.revealed = true;
+    this.turn = null;
     this.broadcast();
   }
 

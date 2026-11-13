@@ -226,3 +226,10 @@ select.input { width: auto; }
 .side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 12px; }
 .side .teacher-panel { margin: 0; }
 .side .ans-row { flex-wrap: wrap; }
+
+/* megfejtett sor: lágy zöld keret; felfedett sor: halvány, szaggatott */
+.cw-row.done .cw-cell:not(.empty) { border-color: #5fbf86; box-shadow: 0 0 0 3px #5fbf8633; }
+.cw-row.done .cw-cell:not(.empty):not(.band) { background: #f1fbf4; }
+.cw-row.revealed-row .cw-cell:not(.empty) { border-style: dashed; border-color: #b9b2a3; }
+.clues li.revealed { color: var(--muted); font-style: italic; }
+.ended .small { font-weight: 400; font-size: 1rem; }

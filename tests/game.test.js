@@ -77,3 +77,27 @@ describe('HostGame', () => {
     expect(g.publicState().revealAll).toHaveLength(puzzle.rows.length);
   });
 });
+
+describe('megoldás felfedése', () => {
+  it('kitölti a hiányzó sorokat, de a megfejtett sorok gazdája megmarad, és utána nem lehet pontot szerezni', () => {
+    const { g, sent } = setup('coop');
+    g.handle('guess', { id: 'a', row: 0, tokens: puzzle.rows[0].tokens });
+    g.revealSolution();
+    const st = last(sent, 'state');
+    expect(st.revealed).toBe(true);
+    expect(st.revealAll).toHaveLength(puzzle.rows.length);
+    expect(st.solved[0].by).toBe('a');
+    expect(st.solved[1]).toBeUndefined();
+    expect(st.bands[0].tokens).toEqual(puzzle.bands[0].tokens);
+    g.handle('guess', { id: 'b', row: 1, tokens: puzzle.rows[1].tokens });
+    g.handle('solution', { id: 'b', band: 0, text: 'petőfi' });
+    expect(g.players.get('b').score).toBe(0);
+  });
+  it('verseny módban is mindenkinek megmutatja', () => {
+    const { g, sent } = setup('race');
+    g.revealSolution();
+    const st = last(sent, 'state');
+    expect(st.revealAll).toHaveLength(puzzle.rows.length);
+    expect(st.bands[0].tokens).toEqual(puzzle.bands[0].tokens);
+  });
+});

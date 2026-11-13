@@ -82,7 +82,7 @@ export function playPage(root, code) {
   const tokensOf = (text) => tokenize(text, { digraphs: st?.puzzle.digraphs !== false });
   const shared = () => st && st.mode !== 'race';
   const myTurn = () => st?.mode === 'turns' && st.turn?.playerId === me.id;
-  const canAnswer = () => st?.status === 'playing' && (st.mode !== 'turns' || myTurn());
+  const canAnswer = () => st?.status === 'playing' && !st.revealed && (st.mode !== 'turns' || myTurn());
   const isSolved = (r) => (shared() ? Boolean(st.solved[r]) : mine.has(r));
   const pname = (id) => st?.players.find((p) => p.id === id)?.name || '?';
   const pcolor = (id) => st?.players.find((p) => p.id === id)?.color || '#999';
@@ -173,7 +173,7 @@ export function playPage(root, code) {
     gridView.setClickable(canAnswer());
     gridView.update(
       (r, i) => {
-        if (st.revealAll) return { text: st.revealAll[r][i], cls: 'solved' };
+        if (st.revealAll && !(shared() && st.solved[r]) && !mine.has(r)) return { text: st.revealAll[r][i], cls: 'revealed' };
         if (shared() && st.solved[r]) return { text: st.solved[r].tokens[i], cls: 'solved', color: st.solved[r].by ? pcolor(st.solved[r].by) : null };
         if (mine.has(r)) return { text: mine.get(r)[i], cls: 'solved', color: pcolor(me.id) };
         if (r === selected && draftTokens[i]) return { text: draftTokens[i], cls: 'draft' };
@@ -182,7 +182,8 @@ export function playPage(root, code) {
       },
       (r) => {
         const g = [...ghosts.entries()].find(([, x]) => x.row === r);
-        const cls = r === selected ? 'selected' : isSolved(r) ? 'done' : '';
+        const won = (shared() && st.solved[r]?.by) || mine.has(r);
+        const cls = r === selected ? 'selected' : won ? 'done' : isSolved(r) || st.revealAll ? 'revealed-row' : '';
         if (shared() && st.solved[r]?.by) return { cls, tag: { name: pname(st.solved[r].by), color: pcolor(st.solved[r].by) } };
         if (g) return { cls, tag: { name: `${pname(g[0])} gépel…`, color: pcolor(g[0]) } };
         return { cls };
@@ -261,7 +262,7 @@ export function playPage(root, code) {
 
     cluesBox.hidden = st.status === 'lobby';
     fill(cluesBox, h('h3', {}, 'Meghatározások'), renderClues(st.puzzle, {
-      cls: (r) => (isSolved(r) ? 'done' : r === selected ? 'selected' : ''),
+      cls: (r) => ((shared() && st.solved[r]?.by) || mine.has(r) ? 'done' : r === selected ? 'selected' : isSolved(r) || st.revealAll ? 'revealed' : ''),
       onRow: canAnswer() ? select : null,
     }));
 
@@ -286,6 +287,7 @@ export function playPage(root, code) {
   openRoom(code, me, {
     onMessage: (t, p) => {
       if (t === 'state') {
+        if (st && !st.revealed && p.revealed && p.status === 'playing') toast('💡 A tanár felfedte a megoldást.', 'info');
         const first = !st;
         st = p;
         if (first) clearInterval(helloTimer);

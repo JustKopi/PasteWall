@@ -112,7 +112,7 @@ export function hostPage(root, code) {
   const playerName = (id) => game.players.get(id)?.name || '?';
   const playerColor = (id) => game.players.get(id)?.color || '#999';
   const tokensOf = (text) => tokenize(text, { digraphs: pz.digraphs !== false });
-  const teacherCanAnswer = () => teacherPlays && game.status === 'playing' && (cfg.mode !== 'turns' || game.turn?.playerId === teacherId);
+  const teacherCanAnswer = () => teacherPlays && game.status === 'playing' && !game.revealed && (cfg.mode !== 'turns' || game.turn?.playerId === teacherId);
 
   // ---------- tanár mint játékos ----------
   function withTeacher(ids) {
@@ -137,7 +137,7 @@ export function hostPage(root, code) {
 
   function onRowClick(r) {
     if (game.mode === 'race' && !teacherPlays) return;
-    if (game.solved[r]) return;
+    if (game.solved[r] || game.revealed) return;
     selectedRow = selectedRow === r ? null : r;
     teacherDraft = '';
     ansInput.value = '';
@@ -199,14 +199,14 @@ export function hostPage(root, code) {
     gridView.setClickable(game.mode !== 'race' || teacherPlays);
     gridView.update(
       (r, i) => {
-        if (st.revealAll) return { text: st.revealAll[r][i], cls: st.solved[r] ? 'solved' : 'revealed' };
+        if (st.revealAll && !st.solved[r]) return { text: st.revealAll[r][i], cls: 'revealed' };
         if (st.solved[r]) return { text: st.solved[r].tokens[i], cls: 'solved', color: st.solved[r].by ? playerColor(st.solved[r].by) : null };
         if (r === selectedRow && draft[i]) return { text: draft[i], cls: 'draft' };
         for (const [id, g] of ghosts) if (g.row === r && g.tokens[i]) return { text: g.tokens[i], cls: 'ghost', color: playerColor(id) };
         return null;
       },
       (r) => {
-        const cls = r === selectedRow ? 'selected' : st.solved[r] ? 'done' : '';
+        const cls = r === selectedRow ? 'selected' : st.solved[r]?.by ? 'done' : st.solved[r] || st.revealAll ? 'revealed-row' : '';
         if (st.solved[r]?.by) return { cls, tag: { name: playerName(st.solved[r].by), color: playerColor(st.solved[r].by) } };
         const g = [...ghosts.entries()].find(([, x]) => x.row === r);
         if (g) return { cls, tag: { name: `${playerName(g[0])} gépel…`, color: playerColor(g[0]) } };
@@ -224,7 +224,13 @@ export function hostPage(root, code) {
       st.status === 'playing' && cfg.mode === 'turns' ? h('button', { class: 'btn', onclick: () => game.nextTurn() }, '⏭ Következő játékos') : null,
       st.status === 'playing' && cfg.mode !== 'race' && selectedRow != null && !st.solved[selectedRow]
         ? h('button', { class: 'btn', onclick: () => { const r = selectedRow; selectedRow = null; game.revealRow(r); } }, `👁 ${selectedRow + 1}. sor felfedése`) : null,
-      st.status !== 'ended' && cfg.mode !== 'race'
+      st.status === 'playing' && !st.revealed
+        ? h('button', {
+          class: 'btn',
+          title: 'A meg nem fejtett sorokat és a megfejtést mindenkinél kitölti',
+          onclick: () => { if (confirm('Kitöltöd a meg nem fejtett sorokat a megoldással? Utána már nem lehet pontot szerezni.')) { selectedRow = null; game.revealSolution(); } },
+        }, '💡 Megoldás') : null,
+      st.status !== 'ended' && !st.revealed && cfg.mode !== 'race'
         ? h('button', { class: `btn ${teacherPlays ? 'primary' : ''}`, onclick: toggleTeacher }, teacherPlays ? '🎮 Kilépek a játékból' : '🎮 Én is játszom') : null,
       st.status === 'playing' ? h('button', { class: 'btn danger', onclick: () => { if (confirm('Biztosan befejezed a játékot?')) game.end(); } }, '■ Játék vége') : null,
       st.status === 'ended' ? h('button', { class: 'btn primary', onclick: () => download(`${doc.title} - eredmények.csv`, game.resultsCsv(), 'text/csv') }, '⬇ Eredmények (Excel/CSV)') : null,
@@ -237,7 +243,8 @@ export function hostPage(root, code) {
         st.turn.remainingMs != null ? h('span', { class: 'timer' }, ` · ${Math.ceil(st.turn.remainingMs / 1000)} mp`) : null)
       : null);
 
-    fill(endedBox, st.status === 'ended' ? h('div', { class: 'ended' }, '🎉 Vége a játéknak!') : null);
+    fill(endedBox, st.status === 'ended' ? h('div', { class: 'ended' }, '🎉 Vége a játéknak!')
+      : st.revealed ? h('div', { class: 'ended' }, '💡 Itt a megoldás!', h('span', { class: 'muted small' }, ' Az eredményekhez nyomd meg a „Játék vége” gombot.')) : null);
 
     renderGrid();
 
@@ -246,15 +253,15 @@ export function hostPage(root, code) {
       legendBox.dataset.key = legendKey;
       fill(legendBox, pz.bands.map((b, k) => h('span', {},
         h('span', { class: `band-dot band-${k}` }),
-        st.bands[k].solvedBy ? ` Megfejtette: ${playerName(st.bands[k].solvedBy)} — ${b.text}` : st.status === 'ended' ? ` ${b.text}` : ` ${k + 1}. megfejtés: ${b.length} betű`)));
+        st.bands[k].solvedBy ? ` Megfejtette: ${playerName(st.bands[k].solvedBy)} — ${b.text}` : st.status === 'ended' || st.revealed ? ` Megfejtés: ${b.text}` : ` ${k + 1}. megfejtés: ${b.length} betű`)));
     }
     fill(cluesBox, renderClues(pz, {
-      cls: (r) => (st.solved[r] ? 'done' : r === selectedRow ? 'selected' : ''),
+      cls: (r) => (st.solved[r]?.by ? 'done' : r === selectedRow ? 'selected' : st.solved[r] || st.revealAll ? 'revealed' : ''),
       onRow: game.mode !== 'race' || teacherPlays ? onRowClick : null,
     }));
 
     // tanári panel
-    teacherPanel.hidden = !teacherPlays || st.status !== 'playing';
+    teacherPanel.hidden = !teacherPlays || st.status !== 'playing' || st.revealed;
     const can = teacherCanAnswer();
     ansInput.disabled = !can || selectedRow == null;
     if (!can) fill(ansLabel, h('span', { class: 'muted' }, cfg.mode === 'turns' ? 'Várd meg a köröd.' : ''));
