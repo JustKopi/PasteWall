@@ -5,6 +5,7 @@ import { generateFreeform } from '../crossword/freeform.js';
 import { getPuzzle, savePuzzle, newId } from '../store.js';
 import { createRoom } from '../live/secureroom.js';
 import { MODES } from '../live/game.js';
+import { TOPICS, testCrossword } from '../games/bank.js';
 
 const SAMPLE = {
   title: 'Petőfi Sándor élete',
@@ -126,6 +127,24 @@ export function editorPage(root, id) {
     showResult();
   }
 
+  // ---- tesztrejtvény a beépített kérdésbankból ----
+  let testTopic = 'mix';
+  const testTopicSel = h('select', { class: 'input', onchange: () => { testTopic = testTopicSel.value; } },
+    Object.entries(TOPICS).map(([k, v]) => h('option', { value: k }, v)));
+  function fillTest() {
+    for (let attempt = 0; attempt < 30; attempt++) {
+      const t = testCrossword(testTopic);
+      title.value = t.title;
+      doc.solutions = [t.solution];
+      entries.value = t.entries.map((p) => `${p.a} - ${p.b}`).join('\n');
+      bandInputs();
+      updateCount();
+      generate(true);
+      if (result?.ok) { toast(`Tesztrejtvény kész (megfejtés: ${t.solution})`, 'ok'); return; }
+    }
+    toast('Ebben a témában most nem sikerült kirakni — próbáld újra vagy válassz másik témát.', 'warn');
+  }
+
   function showResult() {
     fill(out);
     if (!result) {
@@ -192,6 +211,9 @@ export function editorPage(root, id) {
       h('div', { class: 'cols' },
         h('section', { class: 'card' },
           title,
+          h('div', { class: 'test-bar' },
+            h('button', { class: 'btn small', title: 'Véletlen megfejtés és kérdések a beépített kérdésbankból (1–8. osztály + informatika)', onclick: fillTest }, '🎲 Tesztrejtvény'),
+            h('label', { class: 'row-label small' }, 'Téma: ', testTopicSel)),
           h('h3', {}, 'Rejtvény típusa'),
           typeBtns,
           h('h3', {}, 'Megfejtés'),

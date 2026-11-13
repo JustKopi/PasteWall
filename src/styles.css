@@ -409,3 +409,5 @@ select.input { width: auto; }
 .pod.p1 { order: 2; padding-top: 28px; background: #fff3c4; }
 .pod.p2 { order: 1; } .pod.p3 { order: 3; }
 .pod-medal { font-size: 2rem; } .pod-name { font-weight: 900; font-size: 1.2rem; } .pod-score { font-weight: 700; }
+.test-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: #fff8dc; border: 2px dashed #e8d48c; border-radius: 12px; padding: 8px 10px; margin: 10px 0; }
+.test-bar .row-label { margin: 0; }

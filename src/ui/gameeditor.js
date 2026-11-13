@@ -7,6 +7,8 @@ import { createSession } from '../games/server.js';
 import { getActivity, saveActivity, newId } from '../store.js';
 import { createRoom } from '../live/secureroom.js';
 import { pickImage, compressImage } from './image.js';
+import { emojiImage, DIAGRAMS } from './testimages.js';
+import { TOPICS, testActivity, testImageQuiz } from '../games/bank.js';
 
 const SAMPLES = {
   pairs: `Budapest - Magyarország fővárosa
@@ -39,37 +41,6 @@ Melyik beviteli eszköz? | Billentyűzet | Monitor | Nyomtató | Hangszóró
 Ki írta a Toldit? | Arany János | Petőfi Sándor | Jókai Mór`,
 };
 
-/** Egyszerű rajzolt példakép emojival (képes kvízhez), hogy fájl nélkül is kipróbálható legyen. */
-function emojiImage(emoji, bg) {
-  const c = document.createElement('canvas');
-  c.width = 480; c.height = 320;
-  const x = c.getContext('2d');
-  x.fillStyle = bg; x.fillRect(0, 0, 480, 320);
-  x.font = '200px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-  x.textAlign = 'center'; x.textBaseline = 'middle';
-  x.fillText(emoji, 240, 175);
-  return c.toDataURL('image/jpeg', 0.8);
-}
-
-/** Rajzolt példaábra: növény részei (ábracímkézőhöz). */
-function plantImage() {
-  const c = document.createElement('canvas');
-  c.width = 480; c.height = 420;
-  const x = c.getContext('2d');
-  x.fillStyle = '#eaf6ff'; x.fillRect(0, 0, 480, 300);
-  x.fillStyle = '#8b5a2b'; x.fillRect(0, 300, 480, 120);
-  x.strokeStyle = '#5a3a1a'; x.lineWidth = 4;
-  x.beginPath(); x.moveTo(240, 300); x.lineTo(200, 400); x.moveTo(240, 300); x.lineTo(285, 405); x.moveTo(240, 300); x.lineTo(240, 410); x.stroke();
-  x.strokeStyle = '#2e8b2e'; x.lineWidth = 10; x.beginPath(); x.moveTo(240, 300); x.lineTo(240, 120); x.stroke();
-  x.fillStyle = '#3bb273';
-  x.beginPath(); x.ellipse(290, 220, 50, 20, -0.5, 0, Math.PI * 2); x.fill();
-  x.beginPath(); x.ellipse(190, 250, 50, 20, 0.5, 0, Math.PI * 2); x.fill();
-  x.fillStyle = '#f25f9a';
-  for (let k = 0; k < 6; k++) { const a = (k / 6) * Math.PI * 2; x.beginPath(); x.ellipse(240 + Math.cos(a) * 32, 100 + Math.sin(a) * 32, 22, 14, a, 0, Math.PI * 2); x.fill(); }
-  x.fillStyle = '#ffc914'; x.beginPath(); x.arc(240, 100, 20, 0, Math.PI * 2); x.fill();
-  return c.toDataURL('image/jpeg', 0.85);
-}
-
 export function gameEditorPage(root, game, id) {
   const existing = id ? getActivity(id) : null;
   const doc = existing || { id: newId(), game, title: '', raw: { text: '' }, timeLimit: 0 };
@@ -94,6 +65,32 @@ export function gameEditorPage(root, game, id) {
       same.length > 1 ? h('label', { class: 'row-label' }, 'Ugyanezzel a tartalommal más játék is: ', typeSel) : null);
   }
 
+  // ---- tesztadat-generátor (beépített kérdésbank) ----
+  let topic = 'mix';
+  function testBar() {
+    const f = fmt();
+    const withTopic = !['imagequiz', 'diagram'].includes(f);
+    const sel = h('select', { class: 'input', onchange: () => { topic = sel.value; } }, Object.entries(TOPICS).map(([k, v]) => h('option', { value: k, selected: k === topic }, v)));
+    return h('div', { class: 'test-bar' },
+      h('button', { class: 'btn small', title: 'Véletlenszerű tartalom a beépített kérdésbankból (1–8. osztály + informatika)', onclick: fillTest }, '🎲 Tesztadatok'),
+      withTopic ? h('label', { class: 'row-label small' }, 'Téma: ', sel) : h('span', { class: 'muted small' }, f === 'diagram' ? 'rajzolt ábrák közül' : 'rajzolt képekkel'));
+  }
+  function fillTest() {
+    const f = fmt();
+    if (f === 'imagequiz') {
+      doc.raw.items = testImageQuiz(8).map((q, k) => ({ image: emojiImage(q.emoji, k), text: q.text }));
+      title.value = 'Képrejtő – teszt';
+    } else if (f === 'diagram') {
+      const d = DIAGRAMS[Math.floor(Math.random() * DIAGRAMS.length)]();
+      doc.raw.image = d.image; doc.raw.labels = d.labels; title.value = d.title;
+    } else {
+      const t = testActivity(doc.game, f, topic);
+      doc.raw.text = t.raw.text; title.value = t.title;
+    }
+    renderContent();
+    toast('Tesztadatok betöltve — nyomd meg a 🧪 Kipróbálom gombot!', 'ok');
+  }
+
   // ---- tartalom-szerkesztők ----
   function renderContent() {
     const f = fmt();
@@ -101,7 +98,7 @@ export function gameEditorPage(root, game, id) {
     if (['pairs', 'truefalse', 'groups', 'sentences', 'mcq'].includes(f)) {
       const ta = h('textarea', { class: 'input entries', rows: 14, placeholder: F.placeholder, oninput: () => { doc.raw.text = ta.value; } });
       ta.value = doc.raw.text || '';
-      fill(contentBox, h('h3', {}, F.label), h('p', { class: 'muted small' }, F.help), ta,
+      fill(contentBox, testBar(), h('h3', {}, F.label), h('p', { class: 'muted small' }, F.help), ta,
         h('button', { class: 'btn ghost small', onclick: () => { ta.value = SAMPLES[f]; doc.raw.text = ta.value; if (!title.value) title.value = 'Próbajáték'; } }, 'Példa betöltése'));
     } else if (f === 'imagequiz') {
       doc.raw.items = doc.raw.items || [];
@@ -112,15 +109,15 @@ export function gameEditorPage(root, game, id) {
         h('input', { class: 'input', value: it.text || '', placeholder: 'Kérdés | HELYES | rossz | rossz', oninput: (e) => { it.text = e.target.value; } }),
         h('button', { class: 'btn ghost small', onclick: () => { doc.raw.items.splice(k, 1); draw(); } }, '✕'))));
       draw();
-      fill(contentBox, h('h3', {}, F.label), h('p', { class: 'muted small' }, F.help), list,
+      fill(contentBox, testBar(), h('h3', {}, F.label), h('p', { class: 'muted small' }, F.help), list,
         h('div', { class: 'actions' },
           h('button', { class: 'btn small', onclick: () => { doc.raw.items.push({ image: null, text: '' }); draw(); } }, '+ Kérdés'),
           h('button', { class: 'btn ghost small', onclick: () => {
             doc.raw.items = [
-              { image: emojiImage('🐘', '#dff3ff'), text: 'Melyik állat ez? | Elefánt | Víziló | Orrszarvú | Bálna' },
-              { image: emojiImage('🦒', '#fff3c4'), text: 'Melyik állat ez? | Zsiráf | Zebra | Teve | Ló' },
-              { image: emojiImage('🖥️', '#eef'), text: 'Mi ez az eszköz? | Monitor | Nyomtató | Egér | Hangszóró' },
-              { image: emojiImage('🌋', '#ffe4dc'), text: 'Mi látható a képen? | Vulkán | Hegy | Domb | Sziget' },
+              { image: emojiImage('🐘', 0), text: 'Melyik állat ez? | Elefánt | Víziló | Orrszarvú | Bálna' },
+              { image: emojiImage('🦒', 1), text: 'Melyik állat ez? | Zsiráf | Zebra | Teve | Ló' },
+              { image: emojiImage('🖥️', 4), text: 'Mi ez az eszköz? | Monitor | Nyomtató | Egér | Hangszóró' },
+              { image: emojiImage('🌋', 3), text: 'Mi látható a képen? | Vulkán | Hegy | Domb | Sziget' },
             ];
             if (!title.value) title.value = 'Képrejtő próba';
             draw();
@@ -141,11 +138,11 @@ export function gameEditorPage(root, game, id) {
           : h('div', { class: 'placeholder' }, 'Tölts fel egy képet (pl. térkép, ábra, a növény részei).'));
       };
       draw();
-      fill(contentBox, h('h3', {}, F.label), h('p', { class: 'muted small' }, F.help, ' Egy címkére kattintva törölheted.'), wrap,
+      fill(contentBox, testBar(), h('h3', {}, F.label), h('p', { class: 'muted small' }, F.help, ' Egy címkére kattintva törölheted.'), wrap,
         h('div', { class: 'actions' },
           h('button', { class: 'btn small', onclick: async () => { const f2 = await pickImage(); if (f2) { doc.raw.image = await compressImage(f2, 900); draw(); } } }, '📷 Kép feltöltése'),
           h('button', { class: 'btn ghost small', onclick: () => {
-            doc.raw.image = plantImage();
+            doc.raw.image = DIAGRAMS[0]().image;
             doc.raw.labels = [{ text: 'virág', x: 50, y: 24 }, { text: 'levél', x: 60.4, y: 52.4 }, { text: 'szár', x: 50, y: 45 }, { text: 'gyökér', x: 50, y: 88 }];
             if (!title.value) title.value = 'A növény részei';
             draw();
