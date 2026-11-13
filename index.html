@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#2b2d42" />
     <title>PasteWall</title>
+    <script>
+      // téma beállítása még a rajzolás előtt (ne villanjon fel a világos téma)
+      try {
+        var t = localStorage.getItem('pastewall.theme');
+        document.documentElement.dataset.theme = t || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      } catch (e) {}
+    </script>
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='8' y='8' width='84' height='84' rx='14' fill='%23ffc914'/><text x='50' y='68' font-size='54' text-anchor='middle' font-family='Arial' font-weight='bold' fill='%232b2d42'>P</text></svg>" />
   </head>
   <body>

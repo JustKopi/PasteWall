@@ -9,6 +9,19 @@ import { gameEditorPage } from './ui/gameeditor.js';
 import { joinPage, playPage } from './ui/play.js';
 
 const app = document.getElementById('app');
+
+// ---- téma (világos / sötét), a választás megmarad ----
+const savedTheme = localStorage.getItem('pastewall.theme');
+const theme = () => document.documentElement.dataset.theme || 'light';
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  themeBtn.textContent = t === 'dark' ? '☀️' : '🌙';
+  themeBtn.title = t === 'dark' ? 'Világos mód' : 'Sötét mód';
+}
+const themeBtn = h('button', { class: 'btn ghost theme-btn', onclick: () => { const t = theme() === 'dark' ? 'light' : 'dark'; localStorage.setItem('pastewall.theme', t); setTheme(t); } });
+setTheme(savedTheme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+export const topbar = h('div', { class: 'topbar' }, themeBtn);
+document.body.insertBefore(topbar, app);
 let cleanup = null;
 
 function route() {
