@@ -1,5 +1,5 @@
 import { h, fill, toast } from './dom.js';
-import { renderGrid, renderClues } from './grid.js';
+import { GridView, renderClues } from './grid.js';
 import { tokenize } from '../crossword/hu.js';
 import { openRoom } from '../live/transport.js';
 import { MODES, POINTS } from '../live/game.js';
@@ -157,36 +157,44 @@ export function playPage(root, code) {
     render();
   }
 
+  let gridView = null;
+  const legend = h('div', { class: 'band-legend' });
+
   function renderGrid_() {
     if (!st) return;
     const pz = st.puzzle;
+    if (!gridView) {
+      gridView = new GridView(pz, { onRow: (r) => { if (canAnswer()) select(r); } });
+      fill(gridBox, h('div', { class: 'card grid-card' }, gridView.el, legend));
+    }
     const draftTokens = selected != null ? tokensOf(ansInput.value) : [];
     const now = Date.now();
-    for (const [id, g] of ghosts) if (now - g.at > 5000) ghosts.delete(id);
-    fill(gridBox, h('div', { class: 'card grid-card' },
-      renderGrid(pz, {
-        cell: (r, c) => {
-          const i = c - pz.rows[r].start;
-          if (st.revealAll) return { text: st.revealAll[r][i], cls: 'solved' };
-          if (shared() && st.solved[r]) return { text: st.solved[r].tokens[i], cls: 'solved', color: st.solved[r].by ? pcolor(st.solved[r].by) : null };
-          if (mine.has(r)) return { text: mine.get(r)[i], cls: 'solved', color: pcolor(me.id) };
-          if (r === selected && draftTokens[i]) return { text: draftTokens[i], cls: 'draft' };
-          for (const [id, g] of ghosts) if (g.row === r && g.tokens[i]) return { text: g.tokens[i], cls: 'ghost', color: pcolor(id) };
-          return null;
-        },
-        row: (r) => {
-          const g = [...ghosts.entries()].find(([, x]) => x.row === r);
-          const cls = r === selected ? 'selected' : isSolved(r) ? 'done' : '';
-          if (shared() && st.solved[r]?.by) return { cls, tag: { name: pname(st.solved[r].by), color: pcolor(st.solved[r].by) } };
-          if (g) return { cls, tag: { name: `${pname(g[0])} gépel…`, color: pcolor(g[0]) } };
-          return { cls };
-        },
-        onRow: canAnswer() ? select : null,
-      }),
-      h('div', { class: 'band-legend' }, pz.bands.map((b, k) => h('span', {},
+    for (const [id, g] of ghosts) if (now - g.at > 5000 || isSolved(g.row)) ghosts.delete(id);
+    gridView.setClickable(canAnswer());
+    gridView.update(
+      (r, i) => {
+        if (st.revealAll) return { text: st.revealAll[r][i], cls: 'solved' };
+        if (shared() && st.solved[r]) return { text: st.solved[r].tokens[i], cls: 'solved', color: st.solved[r].by ? pcolor(st.solved[r].by) : null };
+        if (mine.has(r)) return { text: mine.get(r)[i], cls: 'solved', color: pcolor(me.id) };
+        if (r === selected && draftTokens[i]) return { text: draftTokens[i], cls: 'draft' };
+        for (const [id, g] of ghosts) if (g.row === r && g.tokens[i]) return { text: g.tokens[i], cls: 'ghost', color: pcolor(id) };
+        return null;
+      },
+      (r) => {
+        const g = [...ghosts.entries()].find(([, x]) => x.row === r);
+        const cls = r === selected ? 'selected' : isSolved(r) ? 'done' : '';
+        if (shared() && st.solved[r]?.by) return { cls, tag: { name: pname(st.solved[r].by), color: pcolor(st.solved[r].by) } };
+        if (g) return { cls, tag: { name: `${pname(g[0])} gépel…`, color: pcolor(g[0]) } };
+        return { cls };
+      },
+    );
+    const legendKey = JSON.stringify(st.bands.map((b) => b.tokens));
+    if (legend.dataset.key !== legendKey) {
+      legend.dataset.key = legendKey;
+      fill(legend, pz.bands.map((b, k) => h('span', {},
         h('span', { class: `band-dot band-${k}` }),
-        st.bands[k].tokens ? ` ${st.bands[k].tokens.join('')}` : ` ${k + 1}. megfejtés (${b.length} betű)`))),
-    ));
+        st.bands[k].tokens ? ` ${st.bands[k].tokens.join('')}` : ` ${k + 1}. megfejtés (${b.length} betű)`)));
+    }
   }
 
   function render() {

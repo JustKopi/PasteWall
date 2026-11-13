@@ -129,7 +129,10 @@ select.input { width: auto; }
 }
 .cw-cell.empty { background: transparent; border: 0; }
 .cw-cell.band { background: color-mix(in srgb, var(--band) 55%, #fff); }
-.cw-cell.solved { color: var(--ink); animation: pop 0.35s ease; }
+.cw-cell.solved { color: var(--ink); }
+.cw-cell.pop { animation: pop 0.35s ease; }
+.rows-clickable .cw-row { cursor: pointer; }
+.rows-clickable .cw-row:hover .cw-cell:not(.empty) { border-color: var(--teal); }
 .cw-cell.solved::after { content: ''; position: absolute; inset: auto 3px 2px; height: 3px; border-radius: 2px; background: var(--who, var(--green)); }
 .cw-cell.revealed { color: var(--coral); }
 .cw-cell.draft { color: var(--teal); }
@@ -200,3 +203,26 @@ select.input { width: auto; }
 .toast.warn { background: #c98b00; }
 .toast.out { opacity: 0; transform: translateY(-8px); }
 [hidden] { display: none !important; }
+
+/* --- QR teljes képernyőn --- */
+.qr-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.qr.clickable { cursor: zoom-in; }
+.qr-overlay {
+  position: fixed; inset: 0; z-index: 100; background: var(--wall); display: grid; place-items: center; cursor: zoom-out;
+  background-image: radial-gradient(#e2d9c6 1.2px, transparent 1.3px); background-size: 22px 22px;
+}
+.qr-big { display: flex; align-items: center; gap: 4vw; padding: 3vw; justify-content: center; }
+@media (orientation: portrait) { .qr-big { flex-direction: column; } }
+.qr-big-img { width: min(82vh, 52vw); height: min(82vh, 52vw); background: #fff; padding: 16px; border-radius: 24px; box-shadow: 0 20px 60px -20px #0006; }
+.qr-side { display: flex; flex-direction: column; gap: 10px; max-width: 520px; }
+.room-code.huge { font-size: clamp(3rem, 7vw, 7rem); }
+@media (orientation: portrait) { .qr-big-img { width: 80vw; height: 80vw; } }
+.qr-side .join-line { font-size: 1.3rem; font-weight: 700; word-break: break-all; }
+
+/* --- tanár is játszik --- */
+.teacher-panel { border: 2px solid var(--ink); }
+.teacher-panel h3 { margin-top: 0; }
+.teacher-answer { position: static; border: 0; padding: 0; box-shadow: none; }
+.side { display: flex; flex-direction: column; gap: 16px; position: sticky; top: 12px; }
+.side .teacher-panel { margin: 0; }
+.side .ans-row { flex-wrap: wrap; }
