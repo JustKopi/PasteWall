@@ -1,0 +1,68 @@
+Egér - A számítógép mutatóeszköze
+Billentyűzet - Gépeléshez használt beviteli eszköz
+Monitor - Képet megjelenítő kimeneti eszköz
+Nyomtató - Papírra író kimeneti eszköz
+Hangszóró - Hangot kiadó kimeneti eszköz
+Mikrofon - Hangot rögzítő beviteli eszköz
+Webkamera - Videóhívásnál ez lát minket
+Pendrive - Kis, hordozható adattároló, USB-be dugjuk
+Processzor - A számítógép „agya”
+Internet - Világméretű számítógép-hálózat
+Böngésző - Weboldalak megnyitására szolgáló program
+Jelszó - Titkos karaktersor a belépéshez
+Fájl - Elmentett dokumentum a számítógépen
+Mappa - Ebben rendszerezzük a fájlokat
+Ikon - Kis kép, ami egy programot vagy fájlt jelöl
+Kurzor - Villogó jel, ahol a beírt szöveg megjelenik
+Bájt - 8 bitből álló adategység
+Program - Utasítások sorozata, amit a számítógép végrehajt
+Vírus - Kártékony program, ami „megfertőzi” a gépet
+Mentés - Ctrl+S
+Kukac - A @ jel magyar beceneve
+Laptop - Hordozható számítógép
+Robot - Programozható, önállóan mozgó gép
+Algoritmus - Lépések sorozata egy feladat megoldására
+Duna - Budapesten átfolyó nagy folyó
+Tisza - A „szőke folyó”
+Balaton - Közép-Európa legnagyobb tava
+Kékes - Magyarország legmagasabb hegycsúcsa
+Mátra - Ebben a hegységben található a Kékes
+Budapest - Magyarország fővárosa
+Debrecen - A cívisváros, hazánk második legnépesebb városa
+Alföld - Hazánk legnagyobb tájegysége
+Nap - A Naprendszer központi csillaga
+Hold - A Föld természetes kísérője
+Mars - A „vörös bolygó”
+Jupiter - A Naprendszer legnagyobb bolygója
+Oxigén - Ezt a gázt lélegezzük be
+Gyökér - A növény része, a földből szívja fel a vizet
+Hangya - Szorgalmas rovar, bolyban él
+Méh - Mézet készítő rovar
+Oroszlán - Az állatok királya
+Bálna - A legnagyobb emlős, a tengerben él
+Béka - Kétéltű, ebihalból fejlődik
+Pillangó - Hernyóból fejlődő, színes szárnyú rovar
+Tölgy - Makkot termő fa
+Petőfi - A Nemzeti dal költője
+Toldi - Arany János erős vitéz hőse
+Mátyás - Az igazságos királyunk keresztneve
+István - Első királyunk neve
+Árpád - Honfoglaló fejedelmünk
+Turul - A magyarok mondabeli madara
+Vuk - Fekete István híres kisrókája
+Himnusz - Kölcsey Ferenc verse, nemzeti imádságunk
+Zászló - Piros, fehér, zöld nemzeti jelképünk
+Forint - A magyar pénz neve
+Háromszög - Három oldalú síkidom
+Négyzet - Négy egyenlő oldalú, derékszögű síkidom
+Kocka - Hat egyforma négyzet határolja
+Szökőév - 366 napos év
+Méter - A hosszúság alapmértékegysége
+Liter - Az űrtartalom mértékegysége
+Kilogramm - 1000 gramm
+Ábécé - A betűk sorrendje
+Szótag - A szó kiejthető része, egy magánhangzó van benne
+Mondat - Nagybetűvel kezdődik, írásjellel végződik
+Ige - Cselekvést, történést, létezést jelentő szófaj
+Főnév - Élőlények, tárgyak, fogalmak nevét jelentő szófaj
+Óra - Az idő mérésére szolgáló eszköz
