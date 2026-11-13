@@ -4,6 +4,8 @@ import { isOnline } from './config.js';
 import { homePage } from './ui/home.js';
 import { editorPage } from './ui/editor.js';
 import { hostPage } from './ui/host.js';
+import { miniHostPage } from './ui/minihostpage.js';
+import { gameEditorPage } from './ui/gameeditor.js';
 import { joinPage, playPage } from './ui/play.js';
 
 const app = document.getElementById('app');
@@ -13,10 +15,14 @@ function route() {
   cleanup?.();
   cleanup = null;
   window.scrollTo(0, 0);
-  const [, page = '', arg = ''] = location.hash.split('/');
+  const [, page = '', arg = '', arg2 = ''] = location.hash.split('/');
   const code = arg.toUpperCase();
   if (page === 'edit') cleanup = editorPage(app, arg || null);
-  else if (page === 'host' && code) cleanup = hostPage(app, code);
+  else if (page === 'game' && arg) cleanup = gameEditorPage(app, arg, arg2 || null);
+  else if (page === 'host' && code) {
+    const cfg = JSON.parse(sessionStorage.getItem(`pastewall.host.${code}`) || 'null');
+    cleanup = cfg?.kind === 'mini' ? miniHostPage(app, code) : hostPage(app, code);
+  }
   else if (page === 'play' && code) cleanup = playPage(app, code);
   else if (page === 'join') cleanup = joinPage(app, code);
   else cleanup = homePage(app);

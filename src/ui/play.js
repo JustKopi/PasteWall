@@ -3,6 +3,7 @@ import { makeGridView, renderClues, knownBandLetter } from './grid.js';
 import { AnswerController } from './answer.js';
 import { tokenize } from '../crossword/hu.js';
 import { openRoom } from '../live/transport.js';
+import { miniClient } from './miniplay.js';
 import { MODES, POINTS } from '../live/game.js';
 
 function playerId(code) {
@@ -38,13 +39,10 @@ export function joinPage(root, presetCode = '') {
   (presetCode ? name : code).focus();
 }
 
-export function playPage(root, code) {
-  const name = localStorage.getItem('pastewall.name');
-  if (!name || !sessionStorage.getItem(`pastewall.joined.${code}`)) { joinPage(root, code); return; }
-
-  const me = { id: playerId(code), name, role: 'player' };
+/** Keresztrejtvény a diák eszközén. A szobakapcsolatot a playPage kezeli (ctx). */
+function crosswordClient(root, ctx) {
+  const { me, code } = ctx;
   let st = null;
-  let room = null;
   let round = null;
   const mine = new Map(); // verseny: saját megoldott sorok (row -> tokens)
   const myBands = new Set();
@@ -68,12 +66,12 @@ export function playPage(root, code) {
   const answers = new AnswerController({
     getPub: () => st?.puzzle,
     canAnswer,
-    onSubmit: (row, tokens) => { lastGuess = { row, tokens }; room?.send('guess', { id: me.id, row, tokens }); },
-    onTyping: (row, tokens) => { if (shared()) room?.send('typing', { id: me.id, row, tokens: tokens.some(Boolean) ? tokens : [] }); },
+    onSubmit: (row, tokens) => { lastGuess = { row, tokens }; ctx.send('guess', { id: me.id, row, tokens }); },
+    onTyping: (row, tokens) => { if (shared()) ctx.send('typing', { id: me.id, row, tokens: tokens.some(Boolean) ? tokens : [] }); },
     onChange: () => renderGrid(),
   });
 
-  const status = h('span', { class: 'conn' }, 'Kapcsolódás…');
+  const status = ctx.status;
   const head = h('div', { class: 'play-head' });
   const lobby = h('div', { class: 'card lobby' });
   const turnBox = h('div', { class: 'turn-box' });
@@ -97,7 +95,7 @@ export function playPage(root, code) {
   function submitSolution() {
     if (!canGuessSolution() || !solInput.value.trim()) return;
     lastSolution = tokenize(solInput.value, { digraphs: st.puzzle.digraphs !== false });
-    room?.send('solution', { id: me.id, band: Number(solBand.value), text: solInput.value });
+    ctx.send('solution', { id: me.id, band: Number(solBand.value), text: solInput.value });
   }
 
   function onResult(p) {
@@ -219,8 +217,8 @@ export function playPage(root, code) {
         fill(turnBox,
           h('div', { class: 'turn-banner', style: { '--who': pcolor(st.turn.playerId) } }, 'Most ', h('strong', {}, pname(st.turn.playerId)), ' jön', h('span', { class: 'timer' })),
           h('div', { class: 'vote' }, h('span', {}, `Szerinted eltalálja? (+${POINTS.vote} pont, ha igazad lesz)`),
-            h('button', { class: `btn ${votedFor === true ? 'primary' : ''}`, onclick: () => { votedFor = true; room?.send('vote', { id: me.id, up: true }); render(); } }, '👍 Igen'),
-            h('button', { class: `btn ${votedFor === false ? 'primary' : ''}`, onclick: () => { votedFor = false; room?.send('vote', { id: me.id, up: false }); render(); } }, '👎 Nem')),
+            h('button', { class: `btn ${votedFor === true ? 'primary' : ''}`, onclick: () => { votedFor = true; ctx.send('vote', { id: me.id, up: true }); render(); } }, '👍 Igen'),
+            h('button', { class: `btn ${votedFor === false ? 'primary' : ''}`, onclick: () => { votedFor = false; ctx.send('vote', { id: me.id, up: false }); render(); } }, '👎 Nem')),
         );
       }
       updateTimer();
@@ -257,29 +255,70 @@ export function playPage(root, code) {
   }
   const timer = setInterval(() => { updateTimer(); if (ghosts.size) renderGrid(); }, 1000);
 
-  let helloTimer = null;
-  const hello = () => room?.send('hello', { id: me.id, name: me.name });
-
-  openRoom(code, me, {
-    onMessage: (t, p) => {
+  render();
+  return {
+    onMessage(t, p) {
       if (t === 'state') {
         if (st && !st.revealed && p.revealed && p.status === 'playing') toast('💡 A tanár felfedte a megoldást.', 'info');
-        const first = !st;
         if (round != null && p.round !== round) { newRound(); toast('🧩 Új rejtvény érkezett!', 'ok'); }
         round = p.round;
         st = p;
-        if (first) clearInterval(helloTimer);
-        if (!st.players.some((x) => x.id === me.id)) hello();
+        if (!st.players.some((x) => x.id === me.id)) ctx.hello();
         render();
       } else if (t === 'result') onResult(p);
       else if (t === 'typing' && p?.id !== me.id && shared()) {
         if (p.tokens?.some(Boolean)) ghosts.set(p.id, { row: p.row, tokens: p.tokens, at: Date.now() }); else ghosts.delete(p.id);
         renderGrid();
-      } else if (t === 'kick' && p?.id === me.id) {
+      }
+    },
+    destroy() { answers.destroy(); clearInterval(timer); },
+  };
+}
+
+/**
+ * Diák oldal: egy szobakapcsolat, benne a tanár által épp futtatott játék
+ * (keresztrejtvény vagy minijáték). Játékváltáskor a kapcsolat megmarad.
+ */
+export function playPage(root, code) {
+  const name = localStorage.getItem('pastewall.name');
+  if (!name || !sessionStorage.getItem(`pastewall.joined.${code}`)) { joinPage(root, code); return undefined; }
+
+  const me = { id: playerId(code), name, role: 'player' };
+  let room = null;
+  let gotState = false;
+  let current = null; // { kind, client }
+  const status = h('span', { class: 'conn' }, 'Kapcsolódás…');
+  const hello = () => room?.send('hello', { id: me.id, name: me.name });
+  const ctx = { me, code, status, send: (t, p) => room?.send(t, p), hello };
+
+  fill(root, h('div', { class: 'page narrow' }, h('div', { class: 'card lobby' }, h('h2', {}, 'Csatlakozás…'),
+    h('p', { class: 'muted' }, `Szoba: ${code}. Ha sokáig nem történik semmi, ellenőrizd a kódot, vagy szólj a tanárnak.`))));
+
+  function clientFor(kind) {
+    if (current?.kind === kind) return current.client;
+    current?.client.destroy();
+    const client = kind === 'mini' ? miniClient(root, ctx) : crosswordClient(root, ctx);
+    current = { kind, client };
+    return client;
+  }
+
+  let helloTimer = null;
+  openRoom(code, me, {
+    onMessage: (t, p) => {
+      if (t === 'kick' && p?.id === me.id) {
         room?.close();
+        current?.client.destroy();
+        current = null;
         sessionStorage.removeItem(`pastewall.joined.${code}`);
         fill(root, h('div', { class: 'page narrow' }, h('div', { class: 'card' }, h('h2', {}, 'A tanár kiléptetett a játékból.'), h('a', { class: 'btn', href: '#/join' }, 'Újra belépés'))));
+        return;
       }
+      if (t === 'state') {
+        if (!gotState) { gotState = true; clearInterval(helloTimer); }
+        clientFor(p.kind === 'mini' ? 'mini' : 'crossword').onMessage(t, p);
+        return;
+      }
+      current?.client.onMessage(t, p);
     },
     onPresence: () => {},
     onStatus: (s) => {
@@ -290,12 +329,11 @@ export function playPage(root, code) {
   }).then((r) => {
     room = r;
     hello();
-    helloTimer = setInterval(() => { if (!st) hello(); }, 2500);
+    helloTimer = setInterval(() => { if (!gotState) hello(); }, 2500);
   }).catch((e) => toast(e.message, 'bad'));
 
   const onVis = () => { if (document.visibilityState === 'visible') hello(); };
   document.addEventListener('visibilitychange', onVis);
 
-  render();
-  return () => { answers.destroy(); clearInterval(timer); clearInterval(helloTimer); document.removeEventListener('visibilitychange', onVis); room?.close(); };
+  return () => { current?.client.destroy(); clearInterval(helloTimer); document.removeEventListener('visibilitychange', onVis); room?.close(); };
 }

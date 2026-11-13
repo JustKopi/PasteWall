@@ -2,7 +2,8 @@ import QRCode from 'qrcode';
 import { h, fill, toast, download } from './dom.js';
 import { makeGridView, renderClues, knownBandLetter } from './grid.js';
 import { AnswerController } from './answer.js';
-import { getPuzzle, listPuzzles } from '../store.js';
+import { getPuzzle } from '../store.js';
+import { newGameDialog, switchRoomGame } from './newgame.js';
 import { HostGame, MODES, POINTS } from '../live/game.js';
 import { openRoom } from '../live/transport.js';
 import { isOnline } from '../config.js';
@@ -32,6 +33,8 @@ export function hostPage(root, code) {
     (t, p) => room?.send(t, p),
     () => render(),
   );
+  if (cfg.players) game.seedPlayers(cfg.players); // másik játékból érkeztek
+  if (cfg.round) game.round = cfg.round;
   const mode = () => game.mode;
 
   // ---------- fejléc + QR ----------
@@ -185,44 +188,30 @@ export function hostPage(root, code) {
 
   // ---------- új rejtvény ugyanabban a szobában ----------
   function newPuzzleDialog() {
-    const all = listPuzzles().filter((p) => p.puzzle);
-    let picked = all.find((p) => p.id !== doc.id)?.id || all[0]?.id;
-    const modeSel = h('select', { class: 'input' }, Object.entries(MODES).map(([k, m]) => h('option', { value: k, selected: k === mode() }, m.label)));
-    const close = () => back.remove();
-    const back = h('div', { class: 'modal-back', onclick: (e) => { if (e.target === back) close(); } },
-      h('div', { class: 'modal' },
-        h('h2', {}, '🧩 Új rejtvény ebben a szobában'),
-        h('p', { class: 'muted' }, 'A bent lévők maradnak és átkerülnek az új rejtvényre, új diákok is csatlakozhatnak. A pontok nullázódnak (az előző eredményt előbb töltsd le, ha kell).'),
-        all.length ? h('div', { class: 'pick-list' }, all.map((p) => h('label', { class: 'pick-item' },
-          h('input', { type: 'radio', name: 'pick', value: p.id, checked: p.id === picked, onchange: () => { picked = p.id; } }),
-          h('div', {}, h('strong', {}, p.title), h('div', { class: 'muted small' }, `${p.puzzle.type === 'free' ? 'vegyes irányú' : 'megfejtés-sávos'} · ${p.puzzle.rows.length} kérdés${p.id === doc.id ? ' · (a mostani)' : ''}`)),
-        ))) : h('p', {}, 'Nincs mentett rejtvény. Előbb készíts egyet a szerkesztőben.'),
-        h('label', { class: 'row-label' }, 'Játékmód: ', modeSel),
-        h('div', { class: 'actions' },
-          h('button', {
-            class: 'btn primary',
-            disabled: !all.length,
-            onclick: () => {
-              const next = getPuzzle(picked);
-              if (!next) return;
-              doc = next;
-              pz = next.puzzle;
-              sessionStorage.setItem(cfgKey, JSON.stringify({ ...cfg, puzzleId: next.id, mode: modeSel.value }));
-              ghosts.clear();
-              answers.reset();
-              revealPick = null;
-              buildGrid();
-              game.loadPuzzle({ puzzle: pz, title: next.title, mode: modeSel.value });
-              if (teacherPlays) game.setPresence(withTeacher(lastPresence));
-              close();
-              toast('Új rejtvény betöltve — indítsd el, ha mindenki kész!', 'ok');
-            },
-          }, 'Betöltés'),
-          h('button', { class: 'btn ghost', onclick: close }, 'Mégse'),
-          h('a', { class: 'btn ghost', href: '#/edit', target: '_blank', rel: 'noopener' }, '+ Új rejtvény készítése (új lapon)'),
-        ),
-      ));
-    document.body.append(back);
+    newGameDialog({
+      currentId: doc.id,
+      mode: mode(),
+      onPick: (pick) => {
+        if (pick.kind !== 'crossword') {
+          // másik típusú játék: a tanári oldal átvált, a bent lévők átkerülnek
+          const players = [...game.players.values()].filter((p) => p.id !== teacherId).map(({ id, name, color, joinedAt }) => ({ id, name, color, joinedAt }));
+          switchRoomGame(code, pick, players, (game.round || 1) + 1);
+          return;
+        }
+        const next = getPuzzle(pick.id);
+        if (!next) return;
+        doc = next;
+        pz = next.puzzle;
+        sessionStorage.setItem(cfgKey, JSON.stringify({ ...cfg, kind: 'crossword', puzzleId: next.id, mode: pick.mode, players: undefined }));
+        ghosts.clear();
+        answers.reset();
+        revealPick = null;
+        buildGrid();
+        game.loadPuzzle({ puzzle: pz, title: next.title, mode: pick.mode });
+        if (teacherPlays) game.setPresence(withTeacher(lastPresence));
+        toast('Új rejtvény betöltve — indítsd el, ha mindenki kész!', 'ok');
+      },
+    });
   }
 
   // ---------- kirajzolás ----------
@@ -275,7 +264,7 @@ export function hostPage(root, code) {
         ? h('button', { class: `btn ${teacherPlays ? 'primary' : ''}`, onclick: toggleTeacher }, teacherPlays ? '🎮 Kilépek a játékból' : '🎮 Én is játszom') : null,
       st.status === 'playing' ? h('button', { class: 'btn danger', onclick: () => { if (confirm('Biztosan befejezed a játékot?')) game.end(); } }, '■ Játék vége') : null,
       st.status === 'ended' ? h('button', { class: 'btn', onclick: () => download(`${doc.title} - eredmények.csv`, game.resultsCsv(), 'text/csv') }, '⬇ Eredmények (Excel/CSV)') : null,
-      st.status !== 'playing' || st.revealed ? h('button', { class: `btn ${st.status === 'ended' ? 'primary' : ''}`, onclick: newPuzzleDialog }, '🧩 Új rejtvény (a bent lévőkkel)') : null,
+      st.status !== 'playing' || st.revealed ? h('button', { class: `btn ${st.status === 'ended' ? 'primary' : ''}`, onclick: newPuzzleDialog }, '🎮 Új játék (a bent lévőkkel)') : null,
       h('a', { class: 'btn ghost', href: `#/edit/${doc.id}` }, 'Szerkesztő'),
     );
 

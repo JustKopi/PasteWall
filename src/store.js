@@ -26,3 +26,25 @@ export function newRoomCode() {
   for (const n of buf) s += CODE_CHARS[n % CODE_CHARS.length];
   return s;
 }
+
+// Minijátékok (tevékenységek) tárolása.
+const AKEY = 'pastewall.activities.v1';
+export function listActivities() {
+  try { return JSON.parse(localStorage.getItem(AKEY) || '[]'); } catch { return []; }
+}
+export function getActivity(id) {
+  return listActivities().find((a) => a.id === id) || null;
+}
+export function saveActivity(doc) {
+  const all = listActivities().filter((a) => a.id !== doc.id);
+  all.unshift({ ...doc, updatedAt: Date.now() });
+  try {
+    localStorage.setItem(AKEY, JSON.stringify(all));
+  } catch {
+    throw new Error('Megtelt a böngésző tárhelye (túl sok vagy túl nagy kép). Törölj régi játékokat, vagy használj kevesebb képet.');
+  }
+  return doc;
+}
+export function deleteActivity(id) {
+  localStorage.setItem(AKEY, JSON.stringify(listActivities().filter((a) => a.id !== id)));
+}

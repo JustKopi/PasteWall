@@ -10,7 +10,7 @@ export const MODES = {
   race: { label: 'Verseny', desc: 'Mindenki a saját rejtvényét tölti, élő ranglistával.' },
 };
 
-const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#7e5bef', '#f25f9a', '#2e86ab', '#f18f01', '#3bb273', '#c1121f', '#5f0f40', '#0b6e4f'];
+export const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#7e5bef', '#f25f9a', '#2e86ab', '#f18f01', '#3bb273', '#c1121f', '#5f0f40', '#0b6e4f'];
 
 export const POINTS = { row: 10, solution: 25, solutionBonus: 10, vote: 2 };
 
@@ -220,6 +220,17 @@ export class HostGame {
   missingBandLetters(band, pl) {
     const known = (row) => (this.mode === 'race' ? pl.solvedRows.has(row) : Boolean(this.solved[row]));
     return this.bandCellRows(band).filter((rows) => !rows.some(known)).length;
+  }
+
+  /** Másik játékból átvett játékosok (szobán belüli játékváltás). */
+  seedPlayers(list) {
+    for (const p of list || []) {
+      if (!p?.id || this.players.has(p.id)) continue;
+      this.players.set(p.id, {
+        id: p.id, name: p.name, color: p.color || COLORS[this.players.size % COLORS.length], score: 0, online: true,
+        joinedAt: p.joinedAt || this.now(), solvedRows: new Set(), solvedBands: new Set(), finishedAt: null,
+      });
+    }
   }
 
   /** Új rejtvény ugyanabban a szobában: a játékosok maradnak, a pontok nullázódnak. */
