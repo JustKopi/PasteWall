@@ -3,7 +3,9 @@ import { h, fill, toast } from './dom.js';
 import { GAMES, FORMATS } from '../games/registry.js';
 import { parseContent, validate, prepareRound } from '../games/content.js';
 import { CLIENTS } from '../games/clients.js';
-import { getActivity, saveActivity, newId, newRoomCode } from '../store.js';
+import { createSession } from '../games/server.js';
+import { getActivity, saveActivity, newId } from '../store.js';
+import { createRoom } from '../live/secureroom.js';
 import { pickImage, compressImage } from './image.js';
 
 const SAMPLES = {
@@ -178,17 +180,23 @@ export function gameEditorPage(root, game, id) {
       h('div', { class: 'actions', style: { marginTop: 0, justifyContent: 'space-between' } }, h('strong', {}, `🧪 Kipróbálás: ${GAMES[doc.game].name}`), h('button', { class: 'btn small', onclick: close }, 'Bezárás')),
       area));
     document.body.append(back);
-    preview = CLIENTS[doc.game](area, round, {
+    // a "tanári" játékvezető itt helyben fut, ugyanúgy, mint élő játékban
+    const sess = createSession(doc.game, round, Math.floor(Math.random() * 1e9));
+    let current = sess.start(Date.now()).view;
+    const wrap = (r) => ({ ...r, score: sess.s.score, correct: sess.s.correct, wrong: sess.s.wrong });
+    preview = CLIENTS[doc.game](area, {
       color: '#17bebb',
+      seed: round.seed,
       asset: (k) => k,
-      report: () => {},
+      start: async () => wrap({ view: current, done: sess.s.done }),
+      act: async (op, payload) => { const r = sess.act(op, payload, Date.now()) || {}; if (r.view !== undefined) current = r.view; return wrap(r); },
       finished: (s) => toast(`Kész: ${s.score} pont (${s.correct} helyes, ${s.wrong} hibás)`, 'ok'),
-    }, round.seed);
+    });
   }
 
-  function startLive() {
+  async function startLive() {
     if (!save(true)) return;
-    const code = newRoomCode();
+    const code = await createRoom();
     sessionStorage.setItem(`pastewall.host.${code}`, JSON.stringify({ kind: 'mini', activityId: doc.id }));
     location.hash = `#/host/${code}`;
   }

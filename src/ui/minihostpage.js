@@ -4,7 +4,7 @@ import { createRoomHead } from './roomhead.js';
 import { newGameDialog, switchRoomGame } from './newgame.js';
 import { getActivity } from '../store.js';
 import { MiniHost } from '../live/minihost.js';
-import { openRoom } from '../live/transport.js';
+import { openHostRoom, hasHostKeys } from '../live/secureroom.js';
 import { isOnline } from '../config.js';
 import { GAMES } from '../games/registry.js';
 import { parseContent, prepareRound } from '../games/content.js';
@@ -20,7 +20,7 @@ export function miniHostPage(root, code) {
   const cfgKey = `pastewall.host.${code}`;
   const cfg = JSON.parse(sessionStorage.getItem(cfgKey) || 'null');
   let doc = cfg && getActivity(cfg.activityId);
-  if (!doc) {
+  if (!doc || !hasHostKeys(code)) {
     fill(root, h('div', { class: 'page' }, h('div', { class: 'card' },
       h('h2', {}, 'Ez a szoba nem ezen a gépen fut'),
       h('p', {}, 'A játékot a tanári gépen, a játék szerkesztőjéből lehet elindítani.'),
@@ -30,7 +30,8 @@ export function miniHostPage(root, code) {
   const hostId = `host-${code}`;
   let room = null;
 
-  const game = new MiniHost({ activity: activityForRoom(doc), round: cfg.round || 1 }, (t, p) => room?.send(t, p), () => render());
+  let locked = false;
+  const game = new MiniHost({ activity: activityForRoom(doc), round: cfg.round || 1 }, (t, p) => room?.send(t, p), (id, t, p) => room?.sendTo(id, t, p), () => render());
   if (cfg.players) game.seedPlayers(cfg.players);
 
   const head = createRoomHead(code, () => [...game.players.values()]);
@@ -47,6 +48,7 @@ export function miniHostPage(root, code) {
     head.titleLine.textContent = `${g.icon} ${doc.title} · ${g.name}${st.round > 1 ? ` · ${st.round}. játék` : ''}`;
     fill(controls,
       st.status === 'lobby' ? h('button', { class: 'btn primary big', disabled: !game.players.size, onclick: () => game.start() }, '▶ Indítás') : null,
+      h('button', { class: `btn ${locked ? 'primary' : ''}`, title: 'Lezárt szobába új diák nem léphet be (a bent lévők újracsatlakozhatnak)', onclick: () => { locked = !locked; room?.setLocked(locked); render(); } }, locked ? '🔒 Lezárva' : '🔓 Szoba lezárása'),
       st.status === 'playing' ? h('button', { class: 'btn danger', onclick: () => { if (confirm('Biztosan befejezed?')) game.end(); } }, '■ Játék vége') : null,
       st.status === 'ended' ? h('button', { class: 'btn', onclick: () => download(`${doc.title} - eredmények.csv`, game.resultsCsv(), 'text/csv') }, '⬇ Eredmények (Excel/CSV)') : null,
       st.status !== 'playing' ? h('button', { class: `btn ${st.status === 'ended' ? 'primary' : ''}`, onclick: pickNext }, '🎮 Új játék (a bent lévőkkel)') : null,
@@ -103,9 +105,9 @@ export function miniHostPage(root, code) {
     }
   }, 1000);
 
-  openRoom(code, { id: hostId, name: 'Tanár', role: 'host' }, {
+  openHostRoom(code, {
+    onBlocked: (name) => toast(`🔒 ${name || 'Valaki'} be akart lépni, de a szoba le van zárva.`, 'warn'),
     onMessage: (t, p) => {
-      if (['state', 'content', 'asset', 'kick'].includes(t)) return; // saját üzenetek
       const isNew = t === 'hello' && p?.id && !game.players.has(p.id);
       game.handle(t, p);
       if (isNew && game.players.has(p.id)) toast(`👋 ${game.players.get(p.id).name} csatlakozott (${game.players.size} fő)`, 'ok');
@@ -118,8 +120,10 @@ export function miniHostPage(root, code) {
     },
   }).then((r) => { room = r; game.broadcast(); game.sendContent(); }).catch((e) => toast(e.message, 'bad'));
 
+  // szívverés: az állapotot időnként újraküldjük, így egy elveszett üzenet magától helyreáll
+  const heartbeat = setInterval(() => { if (room) game.broadcast(); }, 4000);
   const warn = (e) => { if (game.status === 'playing' || game.players.size) { e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', warn);
   render();
-  return () => { clearInterval(tick); head.destroy(); document.querySelector('.modal-back')?.remove(); window.removeEventListener('beforeunload', warn); room?.close(); };
+  return () => { clearInterval(tick); clearInterval(heartbeat); head.destroy(); document.querySelector('.modal-back')?.remove(); window.removeEventListener('beforeunload', warn); room?.close(); };
 }

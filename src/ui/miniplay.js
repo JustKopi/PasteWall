@@ -1,4 +1,5 @@
-// Minijáték a diák eszközén: tartalom fogadása, a játék indítása, élő állás.
+// Minijáték a diák eszközén. A játék minden lépésnél a tanári gépet kérdezi (titkosítva),
+// a helyes válaszokat és a pontozást csak a tanári gép ismeri.
 import { h, fill, toast } from './dom.js';
 import { GAMES } from '../games/registry.js';
 import { CLIENTS } from '../games/clients.js';
@@ -6,14 +7,16 @@ import { CLIENTS } from '../games/clients.js';
 export function miniClient(root, ctx) {
   const { me } = ctx;
   let st = null;
-  let content = null;
+  let assetKeys = null; // a körhöz tartozó képek kulcsai (a 'content' üzenetből)
   let contentRound = null;
   const assets = new Map();
-  let needKeys = [];
   let destroyGame = null;
   let startedRound = null;
   let myDone = false;
   let lastNeed = 0;
+  let lastAssetReq = 0;
+  let rid = Math.floor(Math.random() * 1e6);
+  const pending = new Map(); // rid -> {resolve, msg, tries, timer}
 
   const head = h('div', { class: 'play-head' });
   const lobby = h('div', { class: 'card lobby' });
@@ -23,40 +26,57 @@ export function miniClient(root, ctx) {
 
   const myScore = () => st?.players.find((p) => p.id === me.id)?.score ?? 0;
 
+  /** Kérés a tanári géphez; ha nem jön válasz, újraküldjük (a tanár felismeri az ismétlést). */
+  function request(op, payload) {
+    return new Promise((resolve) => {
+      const id = ++rid;
+      const msg = { rid: id, op, payload };
+      const entry = { resolve, msg, tries: 0, timer: null };
+      const fire = () => {
+        if (entry.tries++ > 5) { pending.delete(id); resolve({ error: true }); toast('Megszakadt a kapcsolat a tanárral.', 'bad'); return; }
+        ctx.send('mg', msg);
+        entry.timer = setTimeout(fire, 3500);
+      };
+      pending.set(id, entry);
+      fire();
+    });
+  }
+
   function requestContent() {
     if (Date.now() - lastNeed < 2000) return;
     lastNeed = Date.now();
-    ctx.send('needContent', { id: me.id });
+    ctx.send('needContent', {});
   }
-  let lastAssetReq = 0;
   function requestAssets() {
-    const missing = needKeys.filter((k) => !assets.has(k));
+    const missing = (assetKeys || []).filter((k) => !assets.has(k));
     if (!missing.length || Date.now() - lastAssetReq < 3000) return;
     lastAssetReq = Date.now();
-    ctx.send('needAssets', { id: me.id, keys: missing });
+    ctx.send('needAssets', { keys: missing });
   }
   const needTimer = setInterval(() => {
     if (!st) return;
-    if (!content || contentRound !== st.round) requestContent();
+    if (contentRound !== st.round) requestContent();
     else requestAssets();
   }, 2500);
 
-  function stopGame() { destroyGame?.(); destroyGame = null; }
-
-  function ready() {
-    return content && contentRound === st.round && needKeys.every((k) => assets.has(k));
+  function stopGame() {
+    destroyGame?.(); destroyGame = null;
+    for (const e of pending.values()) clearTimeout(e.timer);
+    pending.clear();
   }
+  const ready = () => contentRound === st.round && (assetKeys || []).every((k) => assets.has(k));
 
   function maybeStart() {
     if (!st || st.status !== 'playing' || myDone || startedRound === st.round || !ready()) return;
     startedRound = st.round;
     const start = CLIENTS[st.game];
     if (!start) { fill(area, h('div', { class: 'card' }, 'Ismeretlen játék.')); return; }
-    const color = st.players.find((p) => p.id === me.id)?.color;
-    destroyGame = start(area, content, {
-      color,
-      asset: (k) => (typeof k === 'string' && k.startsWith('asset:') ? assets.get(k) : k),
-      report: (s) => ctx.send('progress', { id: me.id, ...s }),
+    destroyGame = start(area, {
+      color: st.players.find((p) => p.id === me.id)?.color,
+      seed: st.seed,
+      start: () => request('start'),
+      act: (op, payload) => request(op, payload),
+      asset: (k) => (typeof k === 'string' && assets.get(k)) || null,
       finished: (s) => {
         myDone = true;
         setTimeout(() => {
@@ -65,12 +85,12 @@ export function miniClient(root, ctx) {
             h('p', { class: 'muted' }, `${s.correct} helyes, ${s.wrong} hibás. Várjuk a többieket…`)));
         }, 900);
       },
-    }, content.seed || 1);
+    });
   }
 
   function render() {
     if (!st) return;
-    const g = GAMES[st.game] || { name: st.game, icon: '🎮' };
+    const g = GAMES[st.game] || { name: st.game, icon: '🎮', desc: '' };
     const meP = st.players.find((p) => p.id === me.id);
     fill(head,
       h('div', {}, h('strong', {}, `${g.icon} ${st.title}`), h('span', { class: 'muted' }, ` · ${g.name}`)),
@@ -93,9 +113,10 @@ export function miniClient(root, ctx) {
       requestContent();
     }
     const players = [...st.players].sort((a, b) => b.score - a.score);
+    const top = Math.max(1, ...players.map((p) => p.score));
     fill(board, h('h3', {}, 'Állás'), h('ol', { class: 'players' }, players.slice(0, 10).map((p) => h('li', { class: `${p.online ? '' : 'offline'} ${p.id === me.id ? 'me' : ''}` },
       h('span', { class: 'dot', style: { background: p.color } }), h('span', { class: 'pname' }, p.name, p.done ? ' 🏁' : ''),
-      h('span', { class: 'bar' }, h('span', { style: { width: `${st.max ? (100 * p.score) / st.max : 0}%`, background: p.color } })),
+      h('span', { class: 'bar' }, h('span', { style: { width: `${(100 * p.score) / top}%`, background: p.color } })),
       h('span', { class: 'score' }, p.score)))));
     maybeStart();
   }
@@ -104,17 +125,24 @@ export function miniClient(root, ctx) {
     onMessage(t, p) {
       if (t === 'state') {
         if (st && p.round !== st.round) {
-          stopGame(); myDone = false; startedRound = null; content = null; assets.clear(); needKeys = [];
+          stopGame(); myDone = false; startedRound = null; assetKeys = null; contentRound = null; assets.clear();
           toast('🎮 Új játék érkezett!', 'ok');
         }
         st = p;
         if (!st.players.some((x) => x.id === me.id)) ctx.hello();
         render();
       } else if (t === 'content' && st && p.round === st.round) {
-        if (contentRound !== p.round) { content = p.content; contentRound = p.round; needKeys = p.assetKeys || []; setTimeout(requestAssets, 1200 + Math.random() * 1500); }
+        if (contentRound !== p.round) {
+          contentRound = p.round;
+          assetKeys = Array.isArray(p.assetKeys) ? p.assetKeys.map(String) : [];
+          if (assetKeys.length) setTimeout(requestAssets, 800 + Math.random() * 1500);
+        }
         render();
       } else if (t === 'asset' && st && p.round === st.round) {
-        if (!assets.has(p.key)) { assets.set(p.key, p.data); render(); }
+        if (!assets.has(p.key) && typeof p.data === 'string' && p.data.startsWith('data:image/')) { assets.set(p.key, p.data); render(); }
+      } else if (t === 'mgr') {
+        const e = pending.get(p?.rid);
+        if (e) { clearTimeout(e.timer); pending.delete(p.rid); e.resolve(p); }
       }
     },
     destroy() { stopGame(); clearInterval(needTimer); },

@@ -2,7 +2,8 @@ import { h, fill, toast } from './dom.js';
 import { makeGridView, renderClues } from './grid.js';
 import { generateCrossword, parseEntries } from '../crossword/generator.js';
 import { generateFreeform } from '../crossword/freeform.js';
-import { getPuzzle, savePuzzle, newId, newRoomCode } from '../store.js';
+import { getPuzzle, savePuzzle, newId } from '../store.js';
+import { createRoom } from '../live/secureroom.js';
 import { MODES } from '../live/game.js';
 
 const SAMPLE = {
@@ -173,10 +174,10 @@ export function editorPage(root, id) {
     [30, 60, 90, 0].map((s) => h('option', { value: s, selected: s === 60 }, s ? `${s} mp / kör` : 'nincs időkorlát')),
   );
 
-  function startLive() {
+  async function startLive() {
     if (!save(true)) return;
     const mode = modeSel.querySelector('input:checked').value;
-    const code = newRoomCode();
+    const code = await createRoom();
     sessionStorage.setItem(`pastewall.host.${code}`, JSON.stringify({ puzzleId: doc.id, mode, turnSeconds: Number(turnSel.value) }));
     location.hash = `#/host/${code}`;
   }

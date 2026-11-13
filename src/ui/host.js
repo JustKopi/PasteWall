@@ -5,14 +5,14 @@ import { AnswerController } from './answer.js';
 import { getPuzzle } from '../store.js';
 import { newGameDialog, switchRoomGame } from './newgame.js';
 import { HostGame, MODES, POINTS } from '../live/game.js';
-import { openRoom } from '../live/transport.js';
+import { openHostRoom, hasHostKeys } from '../live/secureroom.js';
 import { isOnline } from '../config.js';
 
 export function hostPage(root, code) {
   const cfgKey = `pastewall.host.${code}`;
   const cfg = JSON.parse(sessionStorage.getItem(cfgKey) || 'null');
   let doc = cfg && getPuzzle(cfg.puzzleId);
-  if (!doc) {
+  if (!doc || !hasHostKeys(code)) {
     fill(root, h('div', { class: 'page' }, h('div', { class: 'card' },
       h('h2', {}, 'Ez a szoba nem ezen a gépen fut'),
       h('p', {}, 'A játékot a tanári gépen, a rejtvény szerkesztőjéből lehet elindítani.'),
@@ -27,6 +27,7 @@ export function hostPage(root, code) {
   let room = null;
   let lastPresence = new Set();
   let teacherPlays = false;
+  let locked = false;
 
   const game = new HostGame(
     { puzzle: pz, title: doc.title, mode: cfg.mode, turnSeconds: cfg.turnSeconds },
@@ -262,6 +263,7 @@ export function hostPage(root, code) {
         }, '💡 Megoldás') : null,
       st.status !== 'ended' && !st.revealed && mode() !== 'race'
         ? h('button', { class: `btn ${teacherPlays ? 'primary' : ''}`, onclick: toggleTeacher }, teacherPlays ? '🎮 Kilépek a játékból' : '🎮 Én is játszom') : null,
+      h('button', { class: `btn ${locked ? 'primary' : ''}`, title: 'Lezárt szobába új diák nem léphet be (a bent lévők újracsatlakozhatnak)', onclick: () => { locked = !locked; room?.setLocked(locked); render(); } }, locked ? '🔒 Lezárva' : '🔓 Szoba lezárása'),
       st.status === 'playing' ? h('button', { class: 'btn danger', onclick: () => { if (confirm('Biztosan befejezed a játékot?')) game.end(); } }, '■ Játék vége') : null,
       st.status === 'ended' ? h('button', { class: 'btn', onclick: () => download(`${doc.title} - eredmények.csv`, game.resultsCsv(), 'text/csv') }, '⬇ Eredmények (Excel/CSV)') : null,
       st.status !== 'playing' || st.revealed ? h('button', { class: `btn ${st.status === 'ended' ? 'primary' : ''}`, onclick: newPuzzleDialog }, '🎮 Új játék (a bent lévőkkel)') : null,
@@ -323,13 +325,18 @@ export function hostPage(root, code) {
     if (ghosts.size) renderGrid();
   }, 1000);
 
-  openRoom(code, { id: hostId, name: 'Tanár', role: 'host' }, {
+  openHostRoom(code, {
+    onBlocked: (name) => toast(`🔒 ${name || 'Valaki'} be akart lépni, de a szoba le van zárva.`, 'warn'),
     onMessage: (t, p) => {
       if (t === 'typing') {
-        if (p?.id && p.id !== teacherId && game.players.has(p.id) && mode() !== 'race') {
-          if (p.tokens?.some(Boolean)) ghosts.set(p.id, { row: p.row, tokens: p.tokens, at: Date.now() });
+        if (p?.id && p.id !== teacherId && game.players.has(p.id) && mode() !== 'race' && game.status === 'playing') {
+          const row = Number(p.row);
+          if (!(row >= 0 && row < pz.rows.length)) return;
+          const tokens = (Array.isArray(p.tokens) ? p.tokens : []).slice(0, pz.rows[row].length).map((x) => String(x || '').slice(0, 3));
+          if (tokens.some(Boolean)) ghosts.set(p.id, { row, tokens, at: Date.now() });
           else ghosts.delete(p.id);
           renderGrid();
+          room?.send('typing', { id: p.id, row, tokens }); // a tanár továbbítja (aláírva) a többieknek
         }
         return;
       }
@@ -355,12 +362,15 @@ export function hostPage(root, code) {
     },
   }).then((r) => { room = r; game.broadcast(); }).catch((e) => toast(e.message, 'bad'));
 
+  // szívverés: az állapotot időnként újraküldjük, így egy elveszett üzenet magától helyreáll
+  const heartbeat = setInterval(() => { if (room) game.broadcast(); }, 4000);
   const warn = (e) => { if (game.status === 'playing' || game.players.size) { e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', warn);
 
   render();
   return () => {
     clearInterval(tick);
+    clearInterval(heartbeat);
     answers.destroy();
     window.removeEventListener('beforeunload', warn);
     document.querySelector('.qr-overlay')?.remove();

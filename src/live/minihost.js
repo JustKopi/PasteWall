@@ -1,10 +1,11 @@
-// Minijátékok "agya" a tanári gépen: játékosok, időzítés, élő ranglista.
-// A diákok a saját gépükön játszanak, és az előrehaladásukat (pont, helyes/rossz) küldik ide.
+// Minijátékok "agya" a tanári gépen. A helyes válaszok csak itt vannak meg:
+// minden diáknak saját játékmenete (session) fut, a diák csak az aktuális kérdést kapja meg
+// (titkosítva, csak neki), a választ itt ellenőrizzük, a pontot és az időt itt számoljuk.
 
 import { COLORS } from './game.js';
-import { maxScore } from '../games/content.js';
+import { createSession } from '../games/server.js';
 
-/** A képeket (data URL) külön üzenetekben küldjük, a tartalomban csak kulcs marad. */
+/** A képeket (data URL) külön, nyilvános üzenetekben küldjük; a tartalomban csak kulcs marad. */
 export function splitAssets(content) {
   const assets = {};
   let n = 0;
@@ -17,12 +18,19 @@ export function splitAssets(content) {
   return { content: walk(content), assets };
 }
 
+const newPlayer = (id, name, color, joinedAt) => ({
+  id, name, color, online: true, joinedAt, score: 0, correct: 0, wrong: 0, total: 0, done: false, finishedAt: null,
+});
+
 export class MiniHost {
   /**
-   * @param {{activity:{id:string, game:string, title:string, content:any, timeLimit?:number}}} opts
+   * @param {{activity:{id:string, game:string, title:string, content:any, timeLimit?:number}, round?:number}} opts
+   * @param {(t:string,p:any)=>void} send     mindenkinek (aláírt)
+   * @param {(id:string,t:string,p:any)=>void} sendTo  egy diáknak (titkosított)
    */
-  constructor(opts, send, onChange = () => {}) {
+  constructor(opts, send, sendTo, onChange = () => {}) {
     this.send = send;
+    this.sendTo = sendTo || (() => {});
     this.onChange = onChange;
     this.players = new Map();
     this.round = opts.round || 1;
@@ -33,20 +41,21 @@ export class MiniHost {
   setActivity(activity) {
     this.activity = activity;
     const { content, assets } = splitAssets(activity.content);
-    this.content = content;
+    this.content = content; // titkos: soha nem küldjük ki egészben
     this.assets = assets;
-    this.max = maxScore(activity.game, activity.content);
+    this.sessions = new Map();
     this.status = 'lobby';
     this.startedAt = null;
     this.endedAt = null;
     this.endsAt = null;
+    this.assetSentAt = new Map();
     for (const p of this.players.values()) Object.assign(p, { score: 0, correct: 0, wrong: 0, total: 0, done: false, finishedAt: null });
   }
 
   seedPlayers(list) {
     for (const p of list || []) {
       if (!p?.id || this.players.has(p.id)) continue;
-      this.players.set(p.id, { id: p.id, name: p.name, color: p.color || COLORS[this.players.size % COLORS.length], online: true, joinedAt: p.joinedAt || this.now(), score: 0, correct: 0, wrong: 0, total: 0, done: false, finishedAt: null });
+      this.players.set(p.id, newPlayer(p.id, p.name, p.color || COLORS[this.players.size % COLORS.length], p.joinedAt || this.now()));
     }
   }
 
@@ -57,7 +66,7 @@ export class MiniHost {
       game: this.activity.game,
       title: this.activity.title,
       status: this.status,
-      max: this.max,
+      seed: this.activity.content.seed || 1,
       remainingMs: this.endsAt ? Math.max(0, this.endsAt - this.now()) : null,
       players: [...this.players.values()].map((p) => ({
         id: p.id, name: p.name, color: p.color, online: p.online, score: p.score, correct: p.correct, wrong: p.wrong, total: p.total, done: p.done, finishedAt: p.finishedAt,
@@ -70,13 +79,17 @@ export class MiniHost {
     this.onChange();
   }
 
-  sendContent() {
-    this.send('content', { round: this.round, content: this.content, assetKeys: Object.keys(this.assets) });
+  /** Gyakori változásoknál (sok válasz) ritkítva küldjük az állapotot. */
+  broadcastSoon() {
+    if (this.bTimer) return;
+    this.bTimer = setTimeout(() => { this.bTimer = null; this.broadcast(); }, 250);
   }
 
-  /** Képek küldése; ugyanazt a képet 3 mp-en belül nem küldjük újra (sok diák egyszerre kérheti). */
+  sendContent() {
+    this.send('content', { round: this.round, assetKeys: Object.keys(this.assets) });
+  }
+
   sendAssets(keys = Object.keys(this.assets)) {
-    this.assetSentAt = this.assetSentAt || new Map();
     const now = this.now();
     for (const key of keys) {
       if (!(key in this.assets)) continue;
@@ -88,34 +101,54 @@ export class MiniHost {
 
   handle(type, p) {
     if (!p || typeof p !== 'object') return;
-    if (type === 'hello') return this.onHello(p);
-    if (type === 'progress') return this.onProgress(p);
-    if (type === 'needContent') { this.sendContent(); return undefined; }
-    if (type === 'needAssets') { this.sendAssets(Array.isArray(p.keys) ? p.keys.slice(0, 50) : undefined); return undefined; }
-    return undefined;
+    if (type === 'hello') { this.onHello(p); return; }
+    if (type === 'needContent') { this.sendContent(); return; }
+    if (type === 'needAssets') { this.sendAssets(Array.isArray(p.keys) ? p.keys.slice(0, 50).map(String) : undefined); return; }
+    if (type === 'mg') this.onAction(p);
   }
 
   onHello({ id, name }) {
     if (!id) return;
     let pl = this.players.get(id);
     if (!pl) {
-      pl = { id, name: String(name || '').trim().slice(0, 24) || 'Névtelen', color: COLORS[this.players.size % COLORS.length], online: true, joinedAt: this.now(), score: 0, correct: 0, wrong: 0, total: 0, done: false, finishedAt: null };
+      pl = newPlayer(id, String(name || '').trim().slice(0, 24) || 'Névtelen', COLORS[this.players.size % COLORS.length], this.now());
       this.players.set(id, pl);
     } else pl.online = true;
     this.broadcast();
     this.sendContent();
   }
 
-  onProgress({ id, score, correct, wrong, total, done }) {
+  sessionFor(id) {
+    let sess = this.sessions.get(id);
+    if (!sess) {
+      sess = createSession(this.activity.game, this.content, Math.floor(Math.random() * 2 ** 31));
+      sess.current = sess.start(this.now()).view;
+      this.sessions.set(id, sess);
+    }
+    return sess;
+  }
+
+  onAction({ id, rid, op, payload }) {
     const pl = this.players.get(id);
-    if (!pl || this.status !== 'playing' || pl.done) return;
-    pl.score = Math.max(0, Math.min(this.max, Math.round(Number(score) || 0)));
-    pl.correct = Math.max(0, Number(correct) || 0);
-    pl.wrong = Math.max(0, Number(wrong) || 0);
-    pl.total = Math.max(0, Number(total) || 0);
-    if (done) { pl.done = true; pl.finishedAt = this.now(); }
-    this.broadcast();
-    if ([...this.players.values()].filter((x) => x.online).every((x) => x.done)) this.end();
+    if (!pl || this.status !== 'playing' || typeof op !== 'string') return;
+    const sess = this.sessionFor(id);
+    // ugyanaz a kérés újra (pl. elveszett a válasz): a korábbi választ küldjük, nem számoljuk kétszer
+    if (rid != null && sess.lastRid === rid) { this.sendTo(id, 'mgr', sess.lastReply); return; }
+    let reply;
+    if (op === 'start') {
+      reply = { view: sess.current, done: sess.s.done }; // újracsatlakozáskor ugyanott folytatja (az időzítés nem indul újra)
+    } else {
+      reply = sess.act(op, payload, this.now()) || {};
+      if (reply.view !== undefined) sess.current = reply.view;
+    }
+    const st = sess.s;
+    Object.assign(pl, { score: st.score, correct: st.correct, wrong: st.wrong, total: st.total });
+    if (st.done && !pl.done) { pl.done = true; pl.finishedAt = this.now(); }
+    sess.lastRid = rid;
+    sess.lastReply = { rid, ...reply, score: st.score, correct: st.correct, wrong: st.wrong };
+    this.sendTo(id, 'mgr', sess.lastReply);
+    if (pl.done && [...this.players.values()].filter((x) => x.online).every((x) => x.done)) { this.end(); return; }
+    this.broadcastSoon();
   }
 
   setPresence(ids) {
@@ -129,6 +162,7 @@ export class MiniHost {
 
   kick(id) {
     this.players.delete(id);
+    this.sessions.delete(id);
     this.send('kick', { id });
     this.broadcast();
   }
@@ -149,16 +183,16 @@ export class MiniHost {
 
   end() {
     if (this.status === 'ended') return;
+    clearTimeout(this.bTimer);
+    this.bTimer = null;
     this.status = 'ended';
     this.endedAt = this.now();
     this.endsAt = null;
     this.broadcast();
   }
 
-  /** Új játék ugyanabban a szobában. */
   load(activity) {
     this.round += 1;
-    this.assetSentAt = new Map();
     this.setActivity(activity);
     this.broadcast();
     this.sendContent();

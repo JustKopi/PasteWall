@@ -19,13 +19,6 @@ export function deletePuzzle(id) {
 export function newId() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-export function newRoomCode() {
-  let s = '';
-  const buf = crypto.getRandomValues(new Uint32Array(6));
-  for (const n of buf) s += CODE_CHARS[n % CODE_CHARS.length];
-  return s;
-}
 
 // Minijátékok (tevékenységek) tárolása.
 const AKEY = 'pastewall.activities.v1';

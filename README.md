@@ -46,3 +46,24 @@ Az élő játékhoz csak a Supabase Realtime (broadcast és presence) kell, adat
 
 A CS, SZ, GY, NY, ZS, LY, TY, DZ és DZS egy cellát foglal, a hosszú változatuk (pl. SSZ)
 pedig két cellát. Összetett szavaknál a `|` jellel lehet kézzel szétválasztani: `HÁZ|SZÁM`.
+
+## Biztonság
+
+A játék egy nyilvános valós idejű csatornán fut, ezért minden védelem végpontok között működik,
+a böngésző beépített kriptográfiájával (Web Crypto: ECDSA P-256, ECDH P-256, AES-GCM 256):
+
+- **A tanár üzenetei alá vannak írva.** A szobakód a tanár nyilvános kulcsaiból származik
+  (SHA-256 lenyomat, 30 bit), így a diák eszköze ellenőrzi, hogy az üzenet valóban a tanártól jön.
+  Hamis „tanári” üzenetet a diákok eldobnak.
+- **A diákok üzenetei titkosítva mennek a tanárnak.** Minden diák saját kulcsot kap; a többiek
+  nem látják a tippjeit, és senki nem küldhet más nevében (a tanári gép a játékost a kulcsához köti).
+- **Visszajátszás ellen** a tanár üzenetei időbélyeget, a diákéi sorszámot visznek.
+- **A helyes válaszok csak a tanári gépen vannak.** Keresztrejtvénynél és minden minijátéknál
+  a tanári gép ellenőrzi a választ, számolja a pontot és méri az időt; a diák csak az aktuális
+  kérdést kapja meg (titkosítva, csak ő).
+- **Szoba lezárása:** a lezárt szobába új diák nem léphet be (a bent lévők újracsatlakozhatnak),
+  a tanár bármikor kiléptethet bárkit.
+
+Korlátok: a 6 karakteres kód 30 bites lenyomat, egy előre, nagy számítási kapacitással készített
+támadás elméletileg talál hozzá illő kulcsot; osztálytermi használatra ez elegendő. Aki tudja a
+kódot, csatlakozni tud (ezért van a lezárás), és a csatornát elárasztani is megpróbálhatja.

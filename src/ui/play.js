@@ -2,7 +2,7 @@ import { h, fill, toast } from './dom.js';
 import { makeGridView, renderClues, knownBandLetter } from './grid.js';
 import { AnswerController } from './answer.js';
 import { tokenize } from '../crossword/hu.js';
-import { openRoom } from '../live/transport.js';
+import { openPlayerRoom } from '../live/secureroom.js';
 import { miniClient } from './miniplay.js';
 import { MODES, POINTS } from '../live/game.js';
 
@@ -66,7 +66,7 @@ function crosswordClient(root, ctx) {
   const answers = new AnswerController({
     getPub: () => st?.puzzle,
     canAnswer,
-    onSubmit: (row, tokens) => { lastGuess = { row, tokens }; ctx.send('guess', { id: me.id, row, tokens }); },
+    onSubmit: (row, tokens) => { lastGuess = { row, tokens, at: Date.now(), tries: 0 }; ctx.send('guess', { id: me.id, row, tokens }); },
     onTyping: (row, tokens) => { if (shared()) ctx.send('typing', { id: me.id, row, tokens: tokens.some(Boolean) ? tokens : [] }); },
     onChange: () => renderGrid(),
   });
@@ -108,7 +108,7 @@ function crosswordClient(root, ctx) {
     if (p.kind === 'row') {
       if (p.correct) {
         if (lastGuess?.row === p.row) mine.set(p.row, lastGuess.tokens);
-        toast(`Helyes! +${POINTS.row} pont`, 'ok');
+        if (!p.repeat || answers.pending === p.row) toast(`Helyes! +${POINTS.row} pont`, 'ok');
       } else {
         toast('Sajnos nem ez a megoldás.', 'bad');
       }
@@ -224,6 +224,7 @@ function crosswordClient(root, ctx) {
       updateTimer();
     }
 
+    if (answers.pending != null && isSolved(answers.pending)) answers.pending = null; // közben más megfejtette
     if (answers.selected != null && (isSolved(answers.selected) || !canAnswer())) answers.deselect();
     renderGrid();
 
@@ -253,7 +254,18 @@ function crosswordClient(root, ctx) {
     if (!el) return;
     el.textContent = turnEndsLocal ? ` · ${Math.max(0, Math.ceil((turnEndsLocal - Date.now()) / 1000))} mp` : '';
   }
-  const timer = setInterval(() => { updateTimer(); if (ghosts.size) renderGrid(); }, 1000);
+  const timer = setInterval(() => {
+    updateTimer();
+    if (ghosts.size) renderGrid();
+    // ha 3 mp-en belül nem jött visszaigazolás, újraküldjük (a tanár felismeri az ismétlést)
+    if (lastGuess && answers.pending === lastGuess.row && Date.now() - lastGuess.at > 3000 && lastGuess.tries < 3) {
+      lastGuess.at = Date.now(); lastGuess.tries++;
+      ctx.send('guess', { id: me.id, row: lastGuess.row, tokens: lastGuess.tokens });
+    }
+    if (lastGuess && answers.pending === lastGuess.row && lastGuess.tries >= 3 && Date.now() - lastGuess.at > 3000) {
+      answers.result(lastGuess.row, false); lastGuess = null; toast('Nem jött válasz a tanári géptől — próbáld újra.', 'warn');
+    }
+  }, 1000);
 
   render();
   return {
@@ -303,7 +315,7 @@ export function playPage(root, code) {
   }
 
   let helloTimer = null;
-  openRoom(code, me, {
+  openPlayerRoom(code, me, {
     onMessage: (t, p) => {
       if (t === 'kick' && p?.id === me.id) {
         room?.close();

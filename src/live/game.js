@@ -152,7 +152,11 @@ export class HostGame {
 
     if (this.mode === 'turns' && this.turn?.playerId !== id) return;
     const already = this.mode === 'race' ? pl.solvedRows.has(row) : Boolean(this.solved[row]);
-    if (already) return;
+    if (already) {
+      // elveszett visszaigazolás miatti újraküldés: újra megerősítjük, pont nélkül
+      if (pl.solvedRows.has(row) && this.checkRow(row, tokens)) this.send('result', { id, row, correct: true, kind: 'row', repeat: true });
+      return;
+    }
 
     const correct = this.checkRow(row, tokens);
     this.log.push({ at: this.now(), id, row, correct });
