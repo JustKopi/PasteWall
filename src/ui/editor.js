@@ -1,6 +1,7 @@
 import { h, fill, toast } from './dom.js';
-import { renderGrid, renderClues } from './grid.js';
+import { makeGridView, renderClues } from './grid.js';
 import { generateCrossword, parseEntries } from '../crossword/generator.js';
+import { generateFreeform } from '../crossword/freeform.js';
 import { getPuzzle, savePuzzle, newId, newRoomCode } from '../store.js';
 import { MODES } from '../live/game.js';
 
@@ -26,7 +27,8 @@ Erdélyi hadsereg - Bem seregének neve`,
 
 export function editorPage(root, id) {
   const existing = id ? getPuzzle(id) : null;
-  const doc = existing || { id: newId(), title: '', solutions: [''], entriesText: '', digraphs: true, layout: 'auto', seed: null, puzzle: null };
+  const doc = existing || { id: newId(), type: 'band', title: '', solutions: [''], entriesText: '', digraphs: true, layout: 'auto', maxWords: 16, seed: null, puzzle: null };
+  doc.type = doc.type || 'band';
   let result = doc.puzzle ? { ok: true, puzzle: doc.puzzle, seed: doc.seed } : null;
 
   const title = h('input', { class: 'input big', placeholder: 'A rejtvény címe (pl. Petőfi élete)', value: doc.title });
@@ -45,6 +47,33 @@ export function editorPage(root, id) {
   entries.value = doc.entriesText;
   const digraphs = h('input', { type: 'checkbox', checked: doc.digraphs !== false });
   const out = h('div', { class: 'preview' });
+  const typeHelp = h('p', { class: 'muted' });
+  const maxWordsSel = h('select', { class: 'input' },
+    [8, 12, 16, 20, 25].map((n) => h('option', { value: n, selected: n === (doc.maxWords || 16) }, `legfeljebb ${n} szó`)));
+  const freeOpts = h('label', { class: 'row-label' }, 'Méret: ', maxWordsSel);
+  const typeBtns = h('div', { class: 'type-switch' });
+
+  function typeUI() {
+    const free = doc.type === 'free';
+    fill(typeBtns,
+      h('button', { class: `btn ${free ? '' : 'primary'}`, onclick: () => setType('band') }, '▤ Megfejtés-sávos'),
+      h('button', { class: `btn ${free ? 'primary' : ''}`, onclick: () => setType('free') }, '✚ Vegyes irányú'));
+    typeHelp.textContent = free
+      ? 'A szavak vízszintesen és függőlegesen keresztezik egymást, a mezők számozottak. A megfejtés nem kötelező: ha megadod, a betűi sorszámozott, kiemelt mezőkbe kerülnek.'
+      : 'A kiemelt függőleges sáv(ok)ban fentről lefelé olvasható ki — mint az újságban.';
+    layoutSel.hidden = free;
+    freeOpts.hidden = !free;
+    bandInputs();
+  }
+  function setType(t) {
+    if (doc.type === t) return;
+    doc.type = t;
+    if (t === 'free') doc.solutions = [doc.solutions[0] || ''];
+    result = null;
+    doc.puzzle = null;
+    typeUI();
+    showResult();
+  }
   const count = h('span', { class: 'muted' });
 
   function bandInputs() {
@@ -54,12 +83,12 @@ export function editorPage(root, id) {
         h('input', {
           class: 'input',
           value: s,
-          placeholder: i === 0 ? 'Megfejtés (fő sáv), pl. SEGESVÁR' : `${i + 1}. sáv megfejtése`,
+          placeholder: doc.type === 'free' ? 'Megfejtés (nem kötelező)' : i === 0 ? 'Megfejtés (fő sáv), pl. SEGESVÁR' : `${i + 1}. sáv megfejtése`,
           oninput: (e) => { doc.solutions[i] = e.target.value; },
         }),
         doc.solutions.length > 1 ? h('button', { class: 'btn ghost small', title: 'Sáv törlése', onclick: () => { doc.solutions.splice(i, 1); bandInputs(); } }, '✕') : null,
       )),
-      doc.solutions.length < 4 ? h('button', { class: 'btn ghost small', onclick: () => { doc.solutions.push(''); bandInputs(); } }, '+ Újabb fő sáv') : null,
+      doc.solutions.length < 4 && doc.type !== 'free' ? h('button', { class: 'btn ghost small', onclick: () => { doc.solutions.push(''); bandInputs(); } }, '+ Újabb fő sáv') : null,
     );
   }
 
@@ -74,17 +103,15 @@ export function editorPage(root, id) {
     doc.entriesText = entries.value;
     doc.digraphs = digraphs.checked;
     doc.layout = layoutSel.value;
+    doc.maxWords = Number(maxWordsSel.value);
   }
 
   function generate(newSeed) {
     collect();
-    result = generateCrossword({
-      solutions: doc.solutions,
-      entries: parseEntries(doc.entriesText),
-      digraphs: doc.digraphs,
-      layout: doc.layout,
-      seed: newSeed ? undefined : doc.seed ?? undefined,
-    });
+    const seed = newSeed ? undefined : doc.seed ?? undefined;
+    result = doc.type === 'free'
+      ? generateFreeform({ solution: doc.solutions[0], entries: parseEntries(doc.entriesText), digraphs: doc.digraphs, maxWords: doc.maxWords, seed })
+      : generateCrossword({ solutions: doc.solutions, entries: parseEntries(doc.entriesText), digraphs: doc.digraphs, layout: doc.layout, seed });
     if (result.ok) {
       doc.seed = result.seed;
       doc.puzzle = result.puzzle;
@@ -110,11 +137,17 @@ export function editorPage(root, id) {
         h('strong', {}, 'Előnézet (megoldással)'),
         pz.layout === 'stacked' && pz.bands.length > 1 ? h('span', { class: 'pill' }, 'a sávok egymás alatt') : null,
       ),
-      renderGrid(pz, { cell: (r, c) => ({ text: pz.rows[r].tokens[c - pz.rows[r].start] }) }),
+      previewGrid(pz),
       h('div', { class: 'band-legend' }, pz.bands.map((b, k) => h('span', {}, h('span', { class: `band-dot band-${k}` }), ` ${b.text}`))),
       renderClues(pz),
       pz.unused.length ? h('p', { class: 'muted' }, `Nem került bele (${pz.unused.length}): ${pz.unused.join(', ')}`) : null,
     );
+  }
+
+  function previewGrid(pz) {
+    const v = makeGridView(pz);
+    v.update((r, i) => ({ text: pz.rows[r].tokens[i] }), () => null);
+    return v.el;
   }
 
   function save(quiet) {
@@ -144,7 +177,7 @@ export function editorPage(root, id) {
     location.hash = `#/host/${code}`;
   }
 
-  bandInputs();
+  typeUI();
   updateCount();
   showResult();
 
@@ -154,10 +187,13 @@ export function editorPage(root, id) {
       h('div', { class: 'cols' },
         h('section', { class: 'card' },
           title,
+          h('h3', {}, 'Rejtvény típusa'),
+          typeBtns,
           h('h3', {}, 'Megfejtés'),
-          h('p', { class: 'muted' }, 'A kiemelt függőleges sáv(ok)ban fentről lefelé olvasható ki — mint az újságban.'),
+          typeHelp,
           bandsBox,
           layoutSel,
+          freeOpts,
           h('h3', {}, 'Szavak és meghatározások ', count),
           entries,
           h('label', { class: 'check' }, digraphs, ' Kettős betűk (CS, SZ, GY, NY, ZS, DZS…) egy cellában'),

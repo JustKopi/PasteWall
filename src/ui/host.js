@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 import { h, fill, toast, download } from './dom.js';
-import { GridView, renderClues } from './grid.js';
+import { makeGridView, renderClues, entryLabel } from './grid.js';
 import { getPuzzle } from '../store.js';
 import { HostGame, MODES, POINTS } from '../live/game.js';
 import { openRoom } from '../live/transport.js';
@@ -39,6 +39,16 @@ export function hostPage(root, code) {
   const qr = h('img', { class: 'qr clickable', alt: 'QR-kód a belépéshez', title: 'Kattints a teljes képernyőhöz', onclick: () => showQrFull() });
   QRCode.toDataURL(joinUrl, { margin: 1, width: 220 }).then((u) => { qr.src = u; });
 
+  let qrCount = null; // a teljes képernyős QR létszám-kijelzője
+
+  function renderQrCount() {
+    if (!qrCount) return;
+    const online = [...game.players.values()].filter((p) => p.online && p.id !== teacherId);
+    fill(qrCount,
+      h('div', { class: 'qr-count-num' }, `👥 ${online.length}`, h('span', {}, online.length === 1 ? ' játékos bent' : ' játékos bent')),
+      h('div', { class: 'chips' }, online.slice(-40).map((p) => h('span', { class: 'chip', style: { background: p.color } }, p.name))));
+  }
+
   function showQrFull() {
     const big = h('img', { class: 'qr-big-img', alt: 'QR-kód' });
     QRCode.toDataURL(joinUrl, { margin: 1, width: 900 }).then((u) => { big.src = u; });
@@ -46,6 +56,7 @@ export function hostPage(root, code) {
       document.removeEventListener('keydown', onKey);
       if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
       overlay.remove();
+      qrCount = null;
     };
     const onKey = (e) => { if (e.key === 'Escape') close(); };
     const overlay = h('div', { class: 'qr-overlay', onclick: close },
@@ -55,12 +66,14 @@ export function hostPage(root, code) {
           h('div', { class: 'muted' }, 'Olvasd be a telefonoddal, vagy írd be a kódot:'),
           h('div', { class: 'room-code huge' }, code),
           h('div', { class: 'join-line' }, joinUrl.replace(/^https?:\/\//, '').replace(/#.*$/, '')),
+          (qrCount = h('div', { class: 'qr-count' })),
           h('div', { class: 'muted small' }, 'Bezárás: kattintás vagy Esc'),
         ),
       ),
     );
     document.addEventListener('keydown', onKey);
     document.body.append(overlay);
+    renderQrCount();
     overlay.requestFullscreen?.().catch(() => {});
   }
 
@@ -70,7 +83,7 @@ export function hostPage(root, code) {
   const controlsBox = h('div', { class: 'controls' });
   const turnBox = h('div');
   const endedBox = h('div');
-  const gridView = new GridView(pz, { onRow: (r) => onRowClick(r) });
+  const gridView = makeGridView(pz, { onRow: (r) => onRowClick(r) });
   const legendBox = h('div', { class: 'band-legend' });
   const cluesBox = h('div');
   const boardBox = h('div', { class: 'board' });
@@ -216,6 +229,7 @@ export function hostPage(root, code) {
   }
 
   function render() {
+    renderQrCount();
     const st = game.publicState();
     if (selectedRow != null && st.solved[selectedRow]) { selectedRow = null; ansInput.value = ''; teacherDraft = ''; }
 
@@ -223,7 +237,7 @@ export function hostPage(root, code) {
       st.status === 'lobby' ? h('button', { class: 'btn primary big', onclick: () => game.start(), disabled: !game.players.size }, '▶ Indítás') : null,
       st.status === 'playing' && cfg.mode === 'turns' ? h('button', { class: 'btn', onclick: () => game.nextTurn() }, '⏭ Következő játékos') : null,
       st.status === 'playing' && cfg.mode !== 'race' && selectedRow != null && !st.solved[selectedRow]
-        ? h('button', { class: 'btn', onclick: () => { const r = selectedRow; selectedRow = null; game.revealRow(r); } }, `👁 ${selectedRow + 1}. sor felfedése`) : null,
+        ? h('button', { class: 'btn', onclick: () => { const r = selectedRow; selectedRow = null; game.revealRow(r); } }, `👁 ${pz.type === 'free' ? `${pz.rows[selectedRow].num}. ${pz.rows[selectedRow].dir === 'across' ? 'vízszintes' : 'függőleges'}` : `${selectedRow + 1}. sor`} felfedése`) : null,
       st.status === 'playing' && !st.revealed
         ? h('button', {
           class: 'btn',
@@ -253,7 +267,7 @@ export function hostPage(root, code) {
       legendBox.dataset.key = legendKey;
       fill(legendBox, pz.bands.map((b, k) => h('span', {},
         h('span', { class: `band-dot band-${k}` }),
-        st.bands[k].solvedBy ? ` Megfejtette: ${playerName(st.bands[k].solvedBy)} — ${b.text}` : st.status === 'ended' || st.revealed ? ` Megfejtés: ${b.text}` : ` ${k + 1}. megfejtés: ${b.length} betű`)));
+        st.bands[k].solvedBy ? ` Megfejtette: ${playerName(st.bands[k].solvedBy)} — ${b.text}` : st.status === 'ended' || st.revealed ? ` Megfejtés: ${b.text}` : ` ${k + 1}. megfejtés: ${b.length} betű${pz.type === 'free' ? ' (a sorszámozott, kiemelt mezőkből)' : ''}`)));
     }
     fill(cluesBox, renderClues(pz, {
       cls: (r) => (st.solved[r]?.by ? 'done' : r === selectedRow ? 'selected' : st.solved[r] || st.revealAll ? 'revealed' : ''),
@@ -266,7 +280,7 @@ export function hostPage(root, code) {
     ansInput.disabled = !can || selectedRow == null;
     if (!can) fill(ansLabel, h('span', { class: 'muted' }, cfg.mode === 'turns' ? 'Várd meg a köröd.' : ''));
     else if (selectedRow == null) fill(ansLabel, h('span', { class: 'muted' }, 'Kattints egy sorra vagy meghatározásra a válaszhoz.'));
-    else fill(ansLabel, h('strong', {}, `${selectedRow + 1}. `), pz.rows[selectedRow].clue || '', h('span', { class: 'muted' }, ` (${pz.rows[selectedRow].length} betű)`));
+    else fill(ansLabel, h('strong', {}, entryLabel(pz, selectedRow)), pz.rows[selectedRow].clue || '', h('span', { class: 'muted' }, ` (${pz.rows[selectedRow].length} betű)`));
     updateCount();
     solForm.hidden = !can || st.bands.every((b) => b.solvedBy);
 
@@ -305,7 +319,9 @@ export function hostPage(root, code) {
       }
       if (t === 'result' || t === 'state' || t === 'kick' || t === 'votes') return; // saját üzenetek
       if (p?.id === teacherId) return; // senki nem adhatja ki magát a tanárnak
+      const isNew = t === 'hello' && p?.id && !game.players.has(p.id);
       game.handle(t, p);
+      if (isNew && game.players.has(p.id)) toast(`👋 ${game.players.get(p.id).name} csatlakozott (${[...game.players.keys()].filter((id) => id !== teacherId).length} fő)`, 'ok');
       if (t === 'guess' || t === 'solution') ghosts.delete(p?.id);
     },
     onPresence: (ids) => { lastPresence = ids; game.setPresence(withTeacher(ids)); },

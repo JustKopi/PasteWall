@@ -251,6 +251,16 @@ function diagnose(bands, diag, texts, stacked) {
 
 /** Diák-oldali (megoldás nélküli) nézet: csak a forma és a meghatározások. */
 export function publicView(puzzle) {
+  if (puzzle.type === 'free') {
+    return {
+      type: 'free',
+      width: puzzle.width,
+      height: puzzle.height,
+      digraphs: puzzle.digraphs,
+      bands: puzzle.bands.map((b) => ({ length: b.length, cells: b.cells })),
+      rows: puzzle.rows.map((r) => ({ row: r.row, clue: r.clue, dir: r.dir, num: r.num, r: r.r, c: r.c, length: r.length })),
+    };
+  }
   return {
     width: puzzle.width,
     height: puzzle.height,

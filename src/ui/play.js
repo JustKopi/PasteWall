@@ -1,5 +1,5 @@
 import { h, fill, toast } from './dom.js';
-import { GridView, renderClues } from './grid.js';
+import { makeGridView, renderClues, entryLabel } from './grid.js';
 import { tokenize } from '../crossword/hu.js';
 import { openRoom } from '../live/transport.js';
 import { MODES, POINTS } from '../live/game.js';
@@ -164,7 +164,7 @@ export function playPage(root, code) {
     if (!st) return;
     const pz = st.puzzle;
     if (!gridView) {
-      gridView = new GridView(pz, { onRow: (r) => { if (canAnswer()) select(r); } });
+      gridView = makeGridView(pz, { onRow: (r) => { if (canAnswer()) select(r); } });
       fill(gridBox, h('div', { class: 'card grid-card' }, gridView.el, legend));
     }
     const draftTokens = selected != null ? tokensOf(ansInput.value) : [];
@@ -194,7 +194,7 @@ export function playPage(root, code) {
       legend.dataset.key = legendKey;
       fill(legend, pz.bands.map((b, k) => h('span', {},
         h('span', { class: `band-dot band-${k}` }),
-        st.bands[k].tokens ? ` ${st.bands[k].tokens.join('')}` : ` ${k + 1}. megfejtés (${b.length} betű)`)));
+        st.bands[k].tokens ? ` ${st.bands[k].tokens.join('')}` : ` ${k + 1}. megfejtés (${b.length} betű${pz.type === 'free' ? ', a sorszámozott, kiemelt mezőkből' : ''})`)));
     }
   }
 
@@ -250,7 +250,7 @@ export function playPage(root, code) {
       ansInput.disabled = true; ansBtn.disabled = true;
     } else {
       const r = st.puzzle.rows[selected];
-      fill(ansLabel, h('strong', {}, `${selected + 1}. `), r.clue || '', h('span', { class: 'muted' }, ` (${r.length} betű)`));
+      fill(ansLabel, h('strong', {}, entryLabel(st.puzzle, selected)), r.clue || '', h('span', { class: 'muted' }, ` (${r.length} betű)`));
       ansInput.disabled = false; ansBtn.disabled = pendingRow != null;
     }
     updateCount();

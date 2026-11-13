@@ -24,7 +24,10 @@ export function h(tag, props, ...children) {
 
 export function toast(text, kind = 'info') {
   let box = document.querySelector('.toasts');
-  if (!box) { box = h('div', { class: 'toasts' }); document.body.append(box); }
+  if (!box) box = h('div', { class: 'toasts' });
+  // teljes képernyős módban csak a teljes képernyős elem látszik: oda tesszük az értesítést
+  const parent = document.fullscreenElement || document.body;
+  if (box.parentNode !== parent) parent.append(box);
   const t = h('div', { class: `toast ${kind}` }, text);
   box.append(t);
   setTimeout(() => t.classList.add('out'), 2600);
