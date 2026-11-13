@@ -23,7 +23,10 @@ export function joinPage(root, presetCode = '') {
     if (!n) { toast('Írd be a neved!', 'warn'); return; }
     localStorage.setItem('pastewall.name', n);
     sessionStorage.setItem(`pastewall.joined.${c}`, '1');
-    location.hash = `#/play/${c}`;
+    const target = `#/play/${c}`;
+    // QR-kódból érkezve már ezen a címen vagyunk: ilyenkor nincs hashchange, kézzel kell továbblépni.
+    if (location.hash === target) window.dispatchEvent(new HashChangeEvent('hashchange'));
+    else location.hash = target;
   };
   fill(root, h('div', { class: 'page narrow' }, h('form', { class: 'card join', onsubmit: go },
     h('h2', {}, 'Belépés a játékba'),
