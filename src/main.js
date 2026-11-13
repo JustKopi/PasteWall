@@ -27,5 +27,24 @@ if (!isOnline()) {
     'Demó mód: nincs beállítva szerver, ezért a játék csak ezen a gépen, több böngészőfülön próbálható ki.'));
 }
 
+// Frissítés-ellenőrzés: ha a böngésző régi változatot tart a gyorsítótárban, újratöltünk.
+// (Különben a tanári gép és a telefonok eltérő változatot futtathatnak, és nem látják egymást.)
+async function checkForUpdate() {
+  if (!import.meta.env.PROD) return;
+  try {
+    const res = await fetch(`./index.html?v=${Date.now()}`, { cache: 'no-store' });
+    const latest = (await res.text()).match(/assets\/index-[\w-]+\.js/)?.[0];
+    const current = document.querySelector('script[type="module"][src*="assets/index-"]')?.getAttribute('src')?.match(/assets\/index-[\w-]+\.js/)?.[0];
+    if (!latest || !current || latest === current) return;
+    const key = `pastewall.reloadedFor.${latest}`;
+    if (sessionStorage.getItem(key)) return; // egyszer próbáljuk, nehogy végtelen ciklus legyen
+    sessionStorage.setItem(key, '1');
+    location.reload();
+  } catch {
+    // offline vagy hiba: maradunk a jelenlegi változaton
+  }
+}
+
 window.addEventListener('hashchange', route);
 route();
+checkForUpdate();
