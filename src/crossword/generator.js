@@ -257,7 +257,7 @@ export function publicView(puzzle) {
       width: puzzle.width,
       height: puzzle.height,
       digraphs: puzzle.digraphs,
-      bands: puzzle.bands.map((b) => ({ length: b.length, cells: b.cells })),
+      bands: puzzle.bands.map((b) => ({ length: b.length, cells: b.cells, line: b.line })),
       rows: puzzle.rows.map((r) => ({ row: r.row, clue: r.clue, dir: r.dir, num: r.num, r: r.r, c: r.c, length: r.length })),
     };
   }

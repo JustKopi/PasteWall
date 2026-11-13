@@ -158,6 +158,7 @@ export class FreeGridView {
     const numAt = new Map(pub.rows.map((e) => [`${e.r},${e.c}`, e.num]));
     const solAt = new Map();
     (pub.bands[0]?.cells || []).forEach((x, idx) => solAt.set(`${x.r},${x.c}`, idx + 1));
+    const showSolNums = !pub.bands[0]?.line; // összefüggő sornál nem kell sorszám
     for (let r = 0; r < pub.height; r++) {
       for (let c = 0; c < pub.width; c++) {
         const k = `${r},${c}`;
@@ -167,7 +168,7 @@ export class FreeGridView {
         const t = h('span', { class: 'cw-t' });
         const el = h('div', { class: base, style: pos, onclick: () => this.click(k) },
           numAt.has(k) ? h('span', { class: 'cw-n' }, numAt.get(k)) : null,
-          solAt.has(k) ? h('span', { class: 'cw-s' }, solAt.get(k)) : null,
+          solAt.has(k) && showSolNums ? h('span', { class: 'cw-s' }, solAt.get(k)) : null,
           t);
         el.addEventListener('animationend', () => el.classList.remove('pop'));
         this.cells.set(k, { el, t, base, covers: covers.get(k), text: '', cls: '', color: '' });
@@ -241,4 +242,31 @@ export function makeGridView(pub, opts) {
 export function entryLabel(pub, r) {
   const e = pub.rows[r];
   return pub.type === 'free' ? `${e.num}. ${e.dir === 'across' ? 'vízszintes' : 'függőleges'}: ` : `${r + 1}. `;
+}
+
+/** Ha a megfejtés már ismert, a kiemelt mezőibe ezt a betűt írjuk (sor + betű-index alapján). */
+export function knownBandLetter(pub, bandTokens, r, i) {
+  const e = pub.rows[r];
+  let rr;
+  let cc;
+  if (pub.type === 'free') {
+    const [dr, dc] = e.dir === 'across' ? [0, 1] : [1, 0];
+    rr = e.r + dr * i;
+    cc = e.c + dc * i;
+  } else {
+    rr = r;
+    cc = e.start + i;
+  }
+  for (let k = 0; k < pub.bands.length; k++) {
+    const toks = bandTokens[k];
+    if (!toks) continue;
+    const b = pub.bands[k];
+    if (pub.type === 'free') {
+      const idx = b.cells.findIndex((x) => x.r === rr && x.c === cc);
+      if (idx >= 0) return toks[idx];
+    } else if (b.col === cc && rr >= (b.rowStart || 0) && rr < (b.rowStart || 0) + b.length) {
+      return toks[rr - (b.rowStart || 0)];
+    }
+  }
+  return null;
 }

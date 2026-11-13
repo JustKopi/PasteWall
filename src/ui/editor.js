@@ -50,7 +50,10 @@ export function editorPage(root, id) {
   const typeHelp = h('p', { class: 'muted' });
   const maxWordsSel = h('select', { class: 'input' },
     [8, 12, 16, 20, 25, 30, 40, 50].map((n) => h('option', { value: n, selected: n === (doc.maxWords || 16) }, `legfeljebb ${n} szó`)));
-  const freeOpts = h('label', { class: 'row-label' }, 'Méret: ', maxWordsSel);
+  const solModeSel = h('select', { class: 'input' },
+    h('option', { value: 'scattered', selected: doc.solutionMode !== 'line' }, 'Megfejtés szétszórva (sorszámozott mezők)'),
+    h('option', { value: 'line', selected: doc.solutionMode === 'line' }, 'Megfejtés egy sorban, egymás után'));
+  const freeOpts = h('div', {}, h('label', { class: 'row-label' }, 'Méret: ', maxWordsSel), h('label', { class: 'row-label' }, solModeSel));
   const typeBtns = h('div', { class: 'type-switch' });
 
   function typeUI() {
@@ -59,7 +62,7 @@ export function editorPage(root, id) {
       h('button', { class: `btn ${free ? '' : 'primary'}`, onclick: () => setType('band') }, '▤ Megfejtés-sávos'),
       h('button', { class: `btn ${free ? 'primary' : ''}`, onclick: () => setType('free') }, '✚ Vegyes irányú'));
     typeHelp.textContent = free
-      ? 'A szavak vízszintesen és függőlegesen keresztezik egymást, a mezők számozottak. A megfejtés nem kötelező: ha megadod, a betűi sorszámozott, kiemelt mezőkbe kerülnek.'
+      ? 'A szavak vízszintesen és függőlegesen keresztezik egymást, a mezők számozottak. A megfejtés nem kötelező: ha megadod, a betűi kiemelt mezőkbe kerülnek — szétszórva (sorszámozva) vagy egy összefüggő sorban, amit a többi szó keresztez.'
       : 'A kiemelt függőleges sáv(ok)ban fentről lefelé olvasható ki — mint az újságban.';
     layoutSel.hidden = free;
     freeOpts.hidden = !free;
@@ -104,13 +107,14 @@ export function editorPage(root, id) {
     doc.digraphs = digraphs.checked;
     doc.layout = layoutSel.value;
     doc.maxWords = Number(maxWordsSel.value);
+    doc.solutionMode = solModeSel.value;
   }
 
   function generate(newSeed) {
     collect();
     const seed = newSeed ? undefined : doc.seed ?? undefined;
     result = doc.type === 'free'
-      ? generateFreeform({ solution: doc.solutions[0], entries: parseEntries(doc.entriesText), digraphs: doc.digraphs, maxWords: doc.maxWords, seed })
+      ? generateFreeform({ solution: doc.solutions[0], solutionMode: doc.solutionMode, entries: parseEntries(doc.entriesText), digraphs: doc.digraphs, maxWords: doc.maxWords, seed })
       : generateCrossword({ solutions: doc.solutions, entries: parseEntries(doc.entriesText), digraphs: doc.digraphs, layout: doc.layout, seed });
     if (result.ok) {
       doc.seed = result.seed;

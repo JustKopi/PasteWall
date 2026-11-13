@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 import { h, fill, toast, download } from './dom.js';
-import { makeGridView, renderClues } from './grid.js';
+import { makeGridView, renderClues, knownBandLetter } from './grid.js';
 import { AnswerController } from './answer.js';
 import { getPuzzle, listPuzzles } from '../store.js';
 import { HostGame, MODES, POINTS } from '../live/game.js';
@@ -238,6 +238,8 @@ export function hostPage(root, code) {
         if (st.solved[r]) return { text: st.solved[r].tokens[i], cls: 'solved', color: st.solved[r].by ? playerColor(st.solved[r].by) : null };
         const d = answers.cellInfo(r, i);
         if (d) return d;
+        const bl = knownBandLetter(pz, st.bands.map((b) => b.tokens), r, i);
+        if (bl) return { text: bl, cls: 'band-known' };
         for (const [id, g] of ghosts) if (g.row === r && g.tokens[i]) return { text: g.tokens[i], cls: 'ghost', color: playerColor(id) };
         return null;
       },
@@ -296,7 +298,7 @@ export function hostPage(root, code) {
         h('span', { class: `band-dot band-${k}` }),
         st.bands[k].solvedBy ? ` Megfejtette: ${playerName(st.bands[k].solvedBy)} — ${b.text}`
           : st.status === 'ended' || st.revealed ? ` Megfejtés: ${b.text}`
-            : ` ${k + 1}. megfejtés: ${b.length} betű${pz.type === 'free' ? ' (a sorszámozott, kiemelt mezőkből)' : ''}`)));
+            : ` ${k + 1}. megfejtés: ${b.length} betű${pz.type === 'free' ? (b.line ? ' (a kiemelt sorban)' : ' (a sorszámozott, kiemelt mezőkből)') : ''}`)));
     }
     fill(cluesBox, renderClues(pz, {
       cls: (r) => (st.solved[r]?.by ? 'done' : r === (answers.selected ?? revealPick) ? 'selected' : st.solved[r] || st.revealAll ? 'revealed' : ''),

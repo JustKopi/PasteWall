@@ -1,6 +1,7 @@
 import { h, fill, toast } from './dom.js';
-import { makeGridView, renderClues } from './grid.js';
+import { makeGridView, renderClues, knownBandLetter } from './grid.js';
 import { AnswerController } from './answer.js';
+import { tokenize } from '../crossword/hu.js';
 import { openRoom } from '../live/transport.js';
 import { MODES, POINTS } from '../live/game.js';
 
@@ -47,12 +48,14 @@ export function playPage(root, code) {
   let round = null;
   const mine = new Map(); // verseny: saját megoldott sorok (row -> tokens)
   const myBands = new Set();
+  const myBandTokens = new Map(); // verseny: a saját eltalált megfejtés betűi
   const ghosts = new Map();
   let votedFor = null;
   let turnEndsLocal = null;
   let lastTurnKey = null;
   let gridView = null;
-  let lastGuess = null; // verseny módban a saját helyes válasz betűi kellenek
+  let lastGuess = null;
+  let lastSolution = null; // verseny módban a saját helyes válasz betűi kellenek
 
   const shared = () => st && st.mode !== 'race';
   const myTurn = () => st?.mode === 'turns' && st.turn?.playerId === me.id;
@@ -93,6 +96,7 @@ export function playPage(root, code) {
 
   function submitSolution() {
     if (!canGuessSolution() || !solInput.value.trim()) return;
+    lastSolution = tokenize(solInput.value, { digraphs: st.puzzle.digraphs !== false });
     room?.send('solution', { id: me.id, band: Number(solBand.value), text: solInput.value });
   }
 
@@ -115,6 +119,7 @@ export function playPage(root, code) {
       if (p.late) toast(p.correct ? `Jó volt, de ${pname(p.by)} gyorsabb volt!` : 'Nem ez a megfejtés.', 'info');
       else if (p.correct) {
         myBands.add(p.band);
+        myBandTokens.set(p.band, lastSolution);
         solInput.value = '';
         toast(`Eltaláltad a megfejtést! +${POINTS.solution + (p.bonus ? POINTS.solutionBonus : 0)} pont${p.bonus ? ' (korai bónusz!)' : ''}`, 'ok');
       } else toast('Nem ez a megfejtés.', 'bad');
@@ -139,6 +144,8 @@ export function playPage(root, code) {
         if (mine.has(r)) return { text: mine.get(r)[i], cls: 'solved', color: pcolor(me.id) };
         const d = answers.cellInfo(r, i);
         if (d) return d;
+        const bl = knownBandLetter(pz, st.bands.map((b, k) => b.tokens || (myBands.has(k) && myBandTokens.get(k)) || null), r, i);
+        if (bl) return { text: bl, cls: 'band-known' };
         for (const [id, g] of ghosts) if (g.row === r && g.tokens[i]) return { text: g.tokens[i], cls: 'ghost', color: pcolor(id) };
         return null;
       },
@@ -156,7 +163,7 @@ export function playPage(root, code) {
       legend.dataset.key = legendKey;
       fill(legend, pz.bands.map((b, k) => h('span', {},
         h('span', { class: `band-dot band-${k}` }),
-        st.bands[k].tokens ? ` ${st.bands[k].tokens.join('')}` : ` ${k + 1}. megfejtés (${b.length} betű${pz.type === 'free' ? ', a sorszámozott, kiemelt mezőkből' : ''})`)));
+        st.bands[k].tokens ? ` ${st.bands[k].tokens.join('')}` : ` ${k + 1}. megfejtés (${b.length} betű${pz.type === 'free' ? (b.line ? ', a kiemelt sorban' : ', a sorszámozott, kiemelt mezőkből') : ''})`)));
     }
   }
 
@@ -167,6 +174,7 @@ export function playPage(root, code) {
     legend.dataset.key = '';
     mine.clear();
     myBands.clear();
+    myBandTokens.clear();
     ghosts.clear();
     answers.reset();
     lastTurnKey = null;

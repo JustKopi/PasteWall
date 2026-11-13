@@ -80,3 +80,35 @@ describe('generateFreeform', () => {
     expect(pub).not.toMatch(/tokens|answer|BUDAPEST|Tudás/);
   });
 });
+
+describe('megfejtés egy összefüggő sorban', () => {
+  const big = parseEntries(fs.readFileSync(new URL('../rejtvenyek/nagy-tudasproba.txt', import.meta.url), 'utf8'));
+  it('a megfejtés betűi egymás után, egy sorban/oszlopban, és mindegyiket keresztezi egy szó', () => {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const res = generateFreeform({ entries: big, solution: 'Okos vagy', solutionMode: 'line', maxWords: 30, seed });
+      expect(res.ok, JSON.stringify(res.problems)).toBe(true);
+      const band = res.puzzle.bands[0];
+      expect(band.line).toBe(true);
+      const cells = band.cells;
+      const sameRow = cells.every((x) => x.r === cells[0].r);
+      const sameCol = cells.every((x) => x.c === cells[0].c);
+      expect(sameRow || sameCol).toBe(true);
+      cells.forEach((x, i) => {
+        if (i) expect(sameRow ? x.c - cells[i - 1].c : x.r - cells[i - 1].r).toBe(1); // egymás után
+      });
+      const map = cellMap(res.puzzle);
+      const grid = validate(res.puzzle);
+      cells.forEach((x, i) => {
+        expect(map.has(`${x.r},${x.c}`)).toBe(true); // minden betűjét keresztezi egy szó
+        expect(grid.get(`${x.r},${x.c}`)).toBe(band.tokens[i]);
+      });
+      // a megfejtés nem szerepel kérdésként
+      expect(res.puzzle.rows.some((r) => r.answer === 'Okos vagy')).toBe(false);
+    }
+  });
+  it('jelzi, ha egy betűhöz nincs keresztező szó', () => {
+    const res = generateFreeform({ entries: words.slice(0, 5), solution: 'QQQ', solutionMode: 'line', attempts: 5 });
+    expect(res.ok).toBe(false);
+    expect(res.problems[0]).toMatch(/keresztezni/);
+  });
+});
