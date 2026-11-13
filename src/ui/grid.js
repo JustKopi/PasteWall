@@ -79,7 +79,8 @@ export class GridView {
         if (c < row.start || c >= row.start + row.length) { line.append(h('div', { class: 'cw-cell empty' })); continue; }
         const band = pub.bands.findIndex((b) => b.col === c && r >= (b.rowStart || 0) && r < (b.rowStart || 0) + b.length);
         const base = `cw-cell${band >= 0 ? ` band band-${band}` : ''}`;
-        const cell = h('div', { class: base });
+        const idx = cells.length;
+        const cell = h('div', { class: base, onclick: (e) => { e.stopPropagation(); this.onRow?.(r, idx); } });
         cell.addEventListener('animationend', () => cell.classList.remove('pop'));
         cells.push({ el: cell, base, text: '', cls: '', color: '' });
         line.append(cell);
@@ -187,7 +188,7 @@ export class FreeGridView {
     if (cov.length > 1 && this.selectedRow != null && cov.some((x) => x.row === this.selectedRow)) {
       pick = cov.find((x) => x.row !== this.selectedRow) || pick; // második kattintás: a másik irány
     }
-    this.onRow?.(pick.row);
+    this.onRow?.(pick.row, pick.i);
   }
 
   setClickable(on) { this.el.classList.toggle('rows-clickable', Boolean(on)); }

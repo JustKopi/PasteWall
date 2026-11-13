@@ -12,7 +12,7 @@ export const MODES = {
 
 const COLORS = ['#e4572e', '#17bebb', '#ffc914', '#76b041', '#7e5bef', '#f25f9a', '#2e86ab', '#f18f01', '#3bb273', '#c1121f', '#5f0f40', '#0b6e4f'];
 
-export const POINTS = { row: 10, solution: 25, vote: 2 };
+export const POINTS = { row: 10, solution: 25, solutionBonus: 10, vote: 2 };
 
 export class HostGame {
   /**
@@ -43,6 +43,7 @@ export class HostGame {
   publicState() {
     const shared = this.mode !== 'race';
     return {
+      round: this.round || 1,
       title: this.title,
       mode: this.mode,
       status: this.status,
@@ -180,20 +181,67 @@ export class HostGame {
     band = Number(band);
     const b = this.puzzle.bands[band];
     if (!b) return;
-    if (this.mode === 'turns' && this.turn?.playerId !== id) return;
-    const done = this.mode === 'race' ? pl.solvedBands.has(band) : this.bandSolvedBy[band];
-    if (done) return;
     const correct = sameTokens(tokenize(text, { digraphs: this.puzzle.digraphs }), b.tokens);
-    this.send('result', { id, band, correct, kind: 'solution' });
+    const done = this.mode === 'race' ? pl.solvedBands.has(band) : this.bandSolvedBy[band];
+    if (done) {
+      // valaki gyorsabb volt: csak az elsőt fogadjuk el
+      this.send('result', { id, band, correct, kind: 'solution', late: true, by: this.bandSolvedBy[band] ?? null });
+      return;
+    }
+    // bónusz, ha a megfejtés betűinek legalább fele még nem látszik a rácsban
+    const missing = this.missingBandLetters(band, pl);
+    const bonus = correct && missing * 2 >= b.length;
+    this.send('result', { id, band, correct, kind: 'solution', bonus });
     if (correct) {
-      pl.score += POINTS.solution;
+      pl.score += POINTS.solution + (bonus ? POINTS.solutionBonus : 0);
       pl.solvedBands.add(band);
       if (this.mode !== 'race') this.bandSolvedBy[band] = id;
     }
-    if (this.mode === 'turns') {
+    if (this.mode === 'turns' && this.turn?.playerId === id) {
       this.scoreVotes(correct);
       this.nextTurn();
       return;
+    }
+    this.broadcast();
+  }
+
+  /** A megfejtés egyes mezőit lefedő sorok (bejegyzések) indexei. */
+  bandCellRows(band) {
+    const b = this.puzzle.bands[band];
+    if (this.puzzle.type === 'free') {
+      return b.cells.map(({ r, c }) => this.puzzle.rows
+        .filter((e) => (e.dir === 'across' ? e.r === r && c >= e.c && c < e.c + e.length : e.c === c && r >= e.r && r < e.r + e.length))
+        .map((e) => e.row));
+    }
+    return b.tokens.map((_, i) => [b.rowStart + i]);
+  }
+
+  /** Hány betűje nem látszik még a megfejtésnek (közös módban a közös rácson, versenyben a játékosén). */
+  missingBandLetters(band, pl) {
+    const known = (row) => (this.mode === 'race' ? pl.solvedRows.has(row) : Boolean(this.solved[row]));
+    return this.bandCellRows(band).filter((rows) => !rows.some(known)).length;
+  }
+
+  /** Új rejtvény ugyanabban a szobában: a játékosok maradnak, a pontok nullázódnak. */
+  loadPuzzle({ puzzle, title, mode, turnSeconds }) {
+    this.puzzle = puzzle;
+    this.title = title;
+    if (mode) this.mode = mode;
+    if (turnSeconds != null) this.turnSeconds = turnSeconds;
+    this.round = (this.round || 1) + 1;
+    this.status = 'lobby';
+    this.solved = {};
+    this.bandSolvedBy = {};
+    this.turn = null;
+    this.revealed = false;
+    this.startedAt = null;
+    this.endedAt = null;
+    this.log = [];
+    for (const pl of this.players.values()) {
+      pl.score = 0;
+      pl.solvedRows = new Set();
+      pl.solvedBands = new Set();
+      pl.finishedAt = null;
     }
     this.broadcast();
   }

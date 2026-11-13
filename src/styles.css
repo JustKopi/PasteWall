@@ -266,3 +266,30 @@ select.input { width: auto; }
 .qr-count-num span { font-size: 0.6em; font-weight: 700; color: var(--muted); }
 .qr-count .chips { justify-content: flex-start; margin-top: 8px; max-height: 30vh; overflow: hidden; }
 .toasts { z-index: 200; }
+
+/* közvetlen cellába írás */
+.cell-input { position: fixed; left: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; font-size: 16px; border: 0; padding: 0; pointer-events: none; }
+.cw-cell.cursor { box-shadow: 0 0 0 3px var(--coral) !important; border-color: var(--coral) !important; z-index: 1; }
+.cw-cell.cursor:empty::before, .cw-cell.cursor .cw-t:empty::before { content: ''; width: 2px; height: 55%; background: var(--coral); animation: blink 1s steps(1) infinite; }
+.fw-grid .cw-cell.cursor .cw-t:empty { display: inline-flex; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* gépen: a meghatározások a rejtvény mellett */
+.play-main { display: block; }
+@media (min-width: 1000px) {
+  .play .page, .page.play { max-width: 1400px; }
+  .play-main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+  .play-side { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow: auto; }
+  .play-side .answer { position: static; }
+}
+.play-side .clues-free, .side .clues-free { grid-template-columns: 1fr; }
+.clues-card .clues-scroll, .side .clues-scroll { max-height: 48vh; overflow: auto; padding-right: 4px; }
+.host .page, .page.host { max-width: 1500px; }
+.host-grid { grid-template-columns: minmax(0, 1fr) 380px; }
+.side .clues-card { margin: 0; }
+.side .clues-card h3 { margin-top: 0; }
+.modal-back { position: fixed; inset: 0; background: #2b2d4266; z-index: 90; display: grid; place-items: center; padding: 16px; }
+.modal { background: var(--paper); border-radius: var(--radius); padding: 20px; width: min(560px, 100%); max-height: 90vh; overflow: auto; box-shadow: 0 20px 60px -20px #0008; }
+.pick-list { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; max-height: 40vh; overflow: auto; }
+.pick-item { display: flex; gap: 10px; align-items: center; border: 2px solid #e4ddcf; border-radius: 10px; padding: 8px 10px; cursor: pointer; }
+.pick-item:has(input:checked) { border-color: var(--ink); background: #fff8dc; }

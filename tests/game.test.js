@@ -61,7 +61,7 @@ describe('HostGame', () => {
   it('megfejtés tippelése és kilépő soros játékos', () => {
     const { g } = setup('turns');
     g.handle('solution', { id: 'a', band: 0, text: 'petőfi' });
-    expect(g.players.get('a').score).toBe(POINTS.solution);
+    expect(g.players.get('a').score).toBe(POINTS.solution + POINTS.solutionBonus);
     expect(g.bandSolvedBy[0]).toBe('a');
     expect(g.turn.playerId).toBe('b');
     g.setPresence(new Set(['a']));
@@ -99,5 +99,48 @@ describe('megoldás felfedése', () => {
     const st = last(sent, 'state');
     expect(st.revealAll).toHaveLength(puzzle.rows.length);
     expect(st.bands[0].tokens).toEqual(puzzle.bands[0].tokens);
+  });
+});
+
+describe('megfejtés: leggyorsabb nyer, bónusz ha a fele hiányzik', () => {
+  it('bónusz +10, ha legalább a betűk fele hiányzik; a késői tipp nem ér pontot', () => {
+    const { g, sent } = setup('coop');
+    g.handle('solution', { id: 'a', band: 0, text: 'PETŐFI' });
+    expect(g.players.get('a').score).toBe(POINTS.solution + POINTS.solutionBonus);
+    expect(last(sent, 'result')).toMatchObject({ correct: true, bonus: true });
+    g.handle('solution', { id: 'b', band: 0, text: 'PETŐFI' });
+    expect(g.players.get('b').score).toBe(0);
+    expect(last(sent, 'result')).toMatchObject({ id: 'b', late: true, by: 'a' });
+  });
+  it('ha több mint a fele látszik, sima pontozás', () => {
+    const { g } = setup('coop');
+    for (const r of [0, 1, 2, 3]) g.handle('guess', { id: 'b', row: r, tokens: puzzle.rows[r].tokens });
+    g.handle('solution', { id: 'a', band: 0, text: 'PETŐFI' });
+    expect(g.players.get('a').score).toBe(POINTS.solution);
+  });
+  it('körös módban bárki tippelhet, de csak a soros játékos tippje léptet', () => {
+    const { g } = setup('turns');
+    expect(g.turn.playerId).toBe('a');
+    g.handle('solution', { id: 'b', band: 0, text: 'petőfi' });
+    expect(g.players.get('b').score).toBe(POINTS.solution + POINTS.solutionBonus);
+    expect(g.turn.playerId).toBe('a');
+  });
+});
+
+describe('új rejtvény ugyanabban a szobában', () => {
+  it('a játékosok maradnak, a pontok és a megoldások nullázódnak', () => {
+    const { g, sent } = setup('coop');
+    g.handle('guess', { id: 'a', row: 0, tokens: puzzle.rows[0].tokens });
+    g.end();
+    g.loadPuzzle({ puzzle, title: 'Második', mode: 'race' });
+    const st = last(sent, 'state');
+    expect(st.round).toBe(2);
+    expect(st.status).toBe('lobby');
+    expect(st.title).toBe('Második');
+    expect(st.mode).toBe('race');
+    expect(st.players.map((p) => p.score)).toEqual([0, 0]);
+    expect(st.solved).toEqual({});
+    g.handle('hello', { id: 'c', name: 'Cili' });
+    expect(g.players.size).toBe(3);
   });
 });

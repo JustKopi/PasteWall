@@ -49,7 +49,7 @@ export function editorPage(root, id) {
   const out = h('div', { class: 'preview' });
   const typeHelp = h('p', { class: 'muted' });
   const maxWordsSel = h('select', { class: 'input' },
-    [8, 12, 16, 20, 25].map((n) => h('option', { value: n, selected: n === (doc.maxWords || 16) }, `legfeljebb ${n} szó`)));
+    [8, 12, 16, 20, 25, 30, 40, 50].map((n) => h('option', { value: n, selected: n === (doc.maxWords || 16) }, `legfeljebb ${n} szó`)));
   const freeOpts = h('label', { class: 'row-label' }, 'Méret: ', maxWordsSel);
   const typeBtns = h('div', { class: 'type-switch' });
 
