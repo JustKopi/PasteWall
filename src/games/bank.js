@@ -4,6 +4,7 @@
 export const TOPICS = {
   mix: 'Vegyes',
   info: 'Informatika',
+  infoen: 'Informatika angolul (hálózatok)',
   foldrajz: 'Földrajz',
   tortenelem: 'Történelem',
   irodalom: 'Irodalom',
@@ -69,6 +70,87 @@ Szövegszerkesztő - Program dokumentumok írására (pl. Word)
 Felhő - Interneten elérhető tárhely (angolul: cloud)
 Projektor - Kivetítő eszköz a tanteremben
 Kábel - Vezeték, ami összeköti az eszközöket`,
+
+  // angol szakszó a válasz, magyar megfelelő a meghatározás (rejtvenyek/halozat-angol-magyar.txt)
+  infoen: `Octet - Oktett: 8 bites csoport, az IPv4-cím négy ilyenből áll
+Network portion - Hálózati rész: az IP-cím hálózatot azonosító része
+Host portion - Host rész: az IP-cím eszközt azonosító része
+Prefix - A /24 jelölés neve (magyarul is így mondjuk)
+Prefix length - Prefixhossz: hány bit tartozik a hálózati részhez
+Subnet - Alhálózat
+Subnetting - Alhálózatokra bontás
+Subnet mask - Alhálózati maszk, pl. 255.255.255.0
+Network address - Hálózati cím: a tartomány első címe
+Broadcast address - Broadcast cím: a tartomány utolsó címe, mindenkinek szól
+Usable - Használható (… host address = kiosztható hostcím)
+Address range - Címtartomány
+Block size - Blokkméret: egy alhálózat címeinek száma
+Private - Privát (… IP address: pl. 192.168.x.x)
+Public - Publikus (… IP address: az interneten is elérhető cím)
+Binary - Bináris, kettes számrendszerbeli
+Decimal - Tízes számrendszer (decimális)
+Interface - Interfész: az eszköz hálózati csatlakozási pontja
+Configuration - Konfiguráció, beállítások összessége
+Running - Futó (… configuration: a RAM-ban lévő, éppen érvényes beállítás)
+Startup - Indítási (… configuration: az NVRAM-ban tárolt, induláskor betöltött beállítás)
+Save - Ment (… the configuration: konfiguráció mentése)
+Hostname - Eszköznév
+Routing - Útválasztás
+Local network - Helyi hálózat
+Remote network - Távoli hálózat
+Switch - Kapcsoló: a helyi hálózat eszközeit köti össze
+Gateway - Átjáró (default … = alapértelmezett átjáró)
+Default - Alapértelmezett
+Packet - Csomag: a 3. réteg adategysége
+Frame - Keret: a 2. réteg adategysége
+Header - Fejléc: a csomag elején lévő vezérlő adatok
+Layer - Réteg (pl. az OSI-modell hét …-e)
+Protocol - Protokoll, kommunikációs szabályrendszer
+Bandwidth - Sávszélesség
+Latency - Késleltetés, válaszidő
+Throughput - Tényleges átviteli sebesség
+Wireless - Vezeték nélküli
+Wired - Vezetékes
+Cable - Kábel
+Copper - Réz (… cable = rézkábel)
+Fiber - Optikai szál, üvegszál
+Twisted pair - Sodrott érpár
+Firewall - Tűzfal
+Server - Kiszolgáló
+Client - Ügyfél, kliens
+Static - Statikus, kézzel beállított (pl. … route)
+Dynamic - Dinamikus, automatikusan változó (pl. DHCP-vel kapott cím)
+Lease - Bérlet: amennyi ideig a DHCP-vel kapott cím érvényes
+Route - Útvonal
+Routing table - Útválasztási tábla
+Hop - Ugrás: egy útválasztón való áthaladás
+Neighbor - Szomszéd (szomszédos eszköz)
+Loopback - Visszacsatolási cím, pl. 127.0.0.1
+Unicast - Egyedi címzés: egy feladó, egy címzett
+Multicast - Csoportos címzés: egy feladó, egy csoport
+Collision - Ütközés (két eszköz egyszerre ad)
+Duplex - Kétirányú átvitel (full … = egyszerre mindkét irányba)
+Wildcard mask - Helyettesítő maszk (ACL-ekben használjuk)
+Access list - Hozzáférési lista (ACL)
+Trunk - Több VLAN forgalmát szállító kapcsolat a switchek között
+Ethernet - A legelterjedtebb vezetékes helyi hálózati szabvány
+Command - Parancs
+Prompt - Parancssori jel, pl. Router#
+Password - Jelszó
+Encryption - Titkosítás
+Enable - Engedélyez; Cisco-parancs a privilegizált módba lépéshez
+Privileged - Kiváltságos (… EXEC mode = privilegizált mód)
+Global - Globális (… configuration mode = globális konfigurációs mód)
+Console - Konzol (… port = konzolport a kezdeti beállításhoz)
+Terminal - Terminál (configure … = belépés a konfigurációs módba)
+Shutdown - Leállítás (no … = az interfész bekapcsolása)
+Banner - Belépéskor megjelenő figyelmeztető üzenet (… motd)
+Reload - Újraindítás (Cisco-parancs)
+Erase - Törlés (… startup-config)
+Copy - Másolás (… running-config startup-config)
+Upload - Feltöltés
+Download - Letöltés
+Byte - Bájt: 8 bit`,
 
   foldrajz: `Budapest - Magyarország fővárosa
 Debrecen - Hazánk második legnépesebb városa
@@ -299,7 +381,29 @@ export const PAIRS = Object.entries(RAW_PAIRS).flatMap(([topic, text]) => text.s
 }));
 
 // ---------------------------------------------------------------- igaz / hamis
-const RAW_TF = `info|A monitor beviteli eszköz.|0
+const RAW_TF = `infoen|A „subnet mask” magyarul alhálózati maszk.|1
+infoen|A „router” magyarul kapcsoló.|0
+infoen|A „switch” magyarul kapcsoló.|1
+infoen|A „gateway” magyarul átjáró.|1
+infoen|A „broadcast address” a tartomány első címe.|0
+infoen|A „network address” a tartomány első címe.|1
+infoen|Az „octet” 8 bitből áll.|1
+infoen|Az „octet” 16 bitből áll.|0
+infoen|A „wireless” jelentése vezetékes.|0
+infoen|A „bandwidth” magyarul sávszélesség.|1
+infoen|A „running configuration” az NVRAM-ban tárolt beállítás.|0
+infoen|A „startup configuration” induláskor töltődik be.|1
+infoen|A „hostname” magyarul eszköznév.|1
+infoen|A „routing” magyarul útválasztás.|1
+infoen|A „firewall” magyarul tűzfal.|1
+infoen|A „latency” jelentése sávszélesség.|0
+infoen|A „loopback” cím például 127.0.0.1.|1
+infoen|A „private IP address” az interneten közvetlenül elérhető.|0
+infoen|A „packet” magyarul csomag.|1
+infoen|A „frame” magyarul fejléc.|0
+infoen|A „remote network” jelentése helyi hálózat.|0
+infoen|A „prefix length” a /24-ben a 24.|1
+info|A monitor beviteli eszköz.|0
 info|Az egér beviteli eszköz.|1
 info|Egy bájt 8 bitből áll.|1
 info|A Ctrl+C a beillesztés billentyűparancsa.|0
@@ -406,6 +510,7 @@ export const GROUP_SETS = [
   { topic: 'termeszet', title: 'Állatosztályok', text: 'Emlős: bálna, kutya, denevér, ló, delfin, mókus\nMadár: sas, pingvin, veréb, strucc, gólya, bagoly\nHal: ponty, cápa, harcsa, csuka, pisztráng\nHüllő: gyík, kígyó, krokodil, teknős' },
   { topic: 'nyelvtan', title: 'Szófajok', text: 'Ige: fut, olvas, alszik, ír, énekel\nFőnév: asztal, kutya, Budapest, ház, ceruza\nMelléknév: piros, nagy, gyors, okos, szép\nSzámnév: öt, sok, harmadik, tíz, kevés' },
   { topic: 'info', title: 'Számítógépes eszközök', text: 'Beviteli eszköz: egér, billentyűzet, mikrofon, szkenner, webkamera\nKimeneti eszköz: monitor, nyomtató, hangszóró, projektor, fejhallgató\nHáttértár: pendrive, merevlemez, SSD, memóriakártya' },
+  { topic: 'infoen', title: 'Hálózati szakszavak angolul', text: 'Eszköz: router, switch, firewall, server, cable\nCím: network address, broadcast address, loopback, subnet mask\nCisco-parancs: enable, reload, shutdown, copy, erase' },
   { topic: 'foldrajz', title: 'Fővárosok kontinensenként', text: 'Európa: Párizs, Berlin, Róma, Madrid, Budapest\nÁzsia: Tokió, Peking, Újdelhi, Szöul\nAfrika: Kairó, Nairobi, Rabat\nAmerika: Washington, Ottawa, Brazíliaváros, Mexikóváros' },
   { topic: 'termeszet', title: 'Halmazállapotok', text: 'Szilárd: jég, kő, vas, fa, só\nFolyékony: víz, tej, olaj, méz\nLégnemű: gőz, oxigén, levegő, szén-dioxid' },
   { topic: 'matek', title: 'Páros és páratlan', text: 'Páros: 2, 8, 14, 20, 36, 48\nPáratlan: 3, 9, 15, 21, 27, 45' },
@@ -434,6 +539,9 @@ export const SENTENCES = [
   ['info', 'Az egér a számítógép mutatóeszköze.'], ['info', 'A jelszót senkinek se mondd el.'], ['info', 'A monitor képet jelenít meg.'],
   ['info', 'Egy bájt nyolc bitből áll.'], ['info', 'A böngészővel weboldalakat nyitunk meg.'], ['info', 'A vírusirtó védi a számítógépet.'],
   ['info', 'Mentsd el gyakran a munkádat!'], ['info', 'A nyomtató papírra nyomtat.'], ['info', 'A program utasítások sorozata.'],
+  ['infoen', 'The router forwards packets between networks.'], ['infoen', 'A switch connects devices in a local network.'],
+  ['infoen', 'An octet contains eight bits.'], ['infoen', 'Save the running configuration.'], ['infoen', 'The default gateway is a router.'],
+  ['infoen', 'Every subnet has a broadcast address.'],
   ['muveszet', 'Bartók Béla világhírű zeneszerző volt.'], ['muveszet', 'A hegedűt vonóval szólaltatjuk meg.'], ['muveszet', 'A sakkban a királyt kell mattolni.'],
 ].map(([topic, s]) => ({ topic, s }));
 
@@ -455,6 +563,11 @@ export const EMOJI = [
 const EMOJI_Q = { 'állat': 'Melyik állat ez?', 'étel': 'Mi látható a képen?', 'eszköz': 'Mi ez az eszköz?', 'jármű': 'Melyik jármű ez?', 'természet': 'Mi látható a képen?', 'hangszer': 'Melyik hangszer ez?', 'sport': 'Melyik sporthoz tartozik?' };
 
 // ---------------------------------------------------------------- megfejtések keresztrejtvényhez
+// témához illő megfejtések (az angol szavakban nincsenek magyar ékezetes betűk)
+export const TOPIC_SOLUTIONS = {
+  infoen: ['SUBNETTING', 'ROUTER', 'NETWORK', 'GATEWAY', 'BROADCAST', 'ETHERNET', 'FIREWALL', 'CONFIGURATION', 'INTERFACE', 'PROTOCOL', 'BANDWIDTH', 'PACKET'],
+};
+
 export const SOLUTIONS = ['TUDÁSBAJNOK', 'SZÁMÍTÓGÉP', 'NAPRENDSZER', 'OKOS VAGY', 'IRODALOM', 'FÖLDRAJZ', 'INFORMATIKA', 'HONFOGLALÁS', 'BALATON',
   'KÖNYVTÁR', 'SZORGALOM', 'BARÁTSÁG', 'ISKOLA', 'TANULÁS', 'VAKÁCIÓ', 'ÜGYES VAGY', 'SZÉP MUNKA', 'GRATULÁLOK', 'KITARTÁS', 'KÍVÁNCSISÁG',
   'BUDAPEST', 'MATEMATIKA', 'TERMÉSZET', 'TÖRTÉNELEM', 'ALGORITMUS', 'BILLENTYŰZET', 'PROGRAMOZÁS', 'OSZTÁLYTEREM', 'TUDOMÁNY', 'FELFEDEZÉS'];
@@ -469,7 +582,9 @@ function pick(arr, n, rnd) {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a.slice(0, n);
 }
-const byTopic = (list, topic) => (topic && topic !== 'mix' ? list.filter((x) => x.topic === topic) : list);
+// a szaknyelvi (angol) téma csak külön választva jelenik meg, a „Vegyes” általános műveltségi válogatásba nem kerül
+const MIX_EXCLUDE = new Set(['infoen']);
+const byTopic = (list, topic) => (topic && topic !== 'mix' ? list.filter((x) => x.topic === topic) : list.filter((x) => !MIX_EXCLUDE.has(x.topic)));
 const letters = (s) => [...s].filter((ch) => /\p{L}/u.test(ch)).length;
 const topicLabel = (t) => TOPICS[t] || 'Vegyes';
 
@@ -539,7 +654,7 @@ export function testCrossword(topic = 'mix', seed) {
   const rnd = rng(seed);
   return {
     title: `Tesztrejtvény – ${topicLabel(topic)}`,
-    solution: pick(SOLUTIONS, 1, rnd)[0],
+    solution: pick(TOPIC_SOLUTIONS[topic] || SOLUTIONS, 1, rnd)[0],
     entries: testPairs(80, topic, { maxLetters: 14, rnd }),
     rnd,
   };

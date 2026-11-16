@@ -9,7 +9,7 @@ Subnetting - Alhálózatokra bontás
 Subnet mask - Alhálózati maszk, pl. 255.255.255.0
 Network address - Hálózati cím: a tartomány első címe
 Broadcast address - Broadcast cím: a tartomány utolsó címe, mindenkinek szól
-Usable - Használható (usable host address = kiosztható hostcím)
+Usable - Használható (… host address = kiosztható hostcím)
 Address range - Címtartomány
 Block size - Blokkméret: egy alhálózat címeinek száma
 Private - Privát (… IP address: pl. 192.168.x.x)
