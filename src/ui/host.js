@@ -7,6 +7,8 @@ import { newGameDialog, switchRoomGame } from './newgame.js';
 import { HostGame, MODES, POINTS } from '../live/game.js';
 import { openHostRoom, hasHostKeys } from '../live/secureroom.js';
 import { isOnline } from '../config.js';
+import { TYPING_MS } from '../live/throttle.js';
+import { joinNotifier } from './joins.js';
 
 export function hostPage(root, code) {
   const cfgKey = `pastewall.host.${code}`;
@@ -24,13 +26,30 @@ export function hostPage(root, code) {
   const hostId = `host-${code}`;
   const teacherId = `teacher-${code}`; // a tanár, ha ő is játszik
   const ghosts = new Map(); // playerId -> {row,tokens,at}
+  // Gépelés-továbbítás: nem egyenként, hanem TYPING_MS-onként egy összesített (aláírt) üzenetben.
+  const typingOut = new Map(); // playerId -> {id,row,tokens}
+  let typingTimer = null;
+  const flushTyping = () => {
+    typingTimer = null;
+    if (!typingOut.size) return;
+    room?.send('typingBatch', { items: [...typingOut.values()] });
+    typingOut.clear();
+  };
+  const queueTyping = (id, row, tokens) => {
+    typingOut.set(id, { id, row, tokens });
+    if (!typingTimer) typingTimer = setTimeout(flushTyping, TYPING_MS);
+  };
+  // a rács újrarajzolása képkockánként legfeljebb egyszer (sok egyidejű gépelésnél)
+  const joins = joinNotifier(() => [...game.players.keys()].filter((id) => id !== teacherId).length);
+  let gridFrame = 0;
+  const renderGridSoon = () => { if (!gridFrame) gridFrame = requestAnimationFrame(() => { gridFrame = 0; renderGrid(); }); };
   let room = null;
   let lastPresence = new Set();
   let teacherPlays = false;
   let locked = false;
 
   const game = new HostGame(
-    { puzzle: pz, title: doc.title, mode: cfg.mode, turnSeconds: cfg.turnSeconds },
+    { puzzle: pz, title: doc.title, mode: cfg.mode, turnSeconds: cfg.turnSeconds, coalesceMs: 250 },
     (t, p) => room?.send(t, p),
     () => render(),
   );
@@ -103,7 +122,7 @@ export function hostPage(root, code) {
       toast(correct ? `Helyes! +${POINTS.row} pont` : 'Nem ez a megoldás.', correct ? 'ok' : 'bad');
       answers.result(row, correct);
     },
-    onTyping: (row, tokens) => room?.send('typing', { id: teacherId, row, tokens: tokens.some(Boolean) ? tokens : [] }),
+    onTyping: (row, tokens) => queueTyping(teacherId, row, tokens.some(Boolean) ? tokens : []),
     onChange: () => renderGrid(),
   });
   const solInput = h('input', { class: 'input', placeholder: 'Megfejtés tipp…', autocomplete: 'off' });
@@ -335,8 +354,8 @@ export function hostPage(root, code) {
           const tokens = (Array.isArray(p.tokens) ? p.tokens : []).slice(0, pz.rows[row].length).map((x) => String(x || '').slice(0, 3));
           if (tokens.some(Boolean)) ghosts.set(p.id, { row, tokens, at: Date.now() });
           else ghosts.delete(p.id);
-          renderGrid();
-          room?.send('typing', { id: p.id, row, tokens }); // a tanár továbbítja (aláírva) a többieknek
+          renderGridSoon();
+          queueTyping(p.id, row, tokens); // a tanár továbbítja (aláírva, összesítve) a többieknek
         }
         return;
       }
@@ -345,9 +364,9 @@ export function hostPage(root, code) {
       const isNew = t === 'hello' && p?.id && !game.players.has(p.id);
       const solvedBefore = Object.keys(game.bandSolvedBy).length;
       game.handle(t, p);
-      if (isNew && game.players.has(p.id)) toast(`👋 ${game.players.get(p.id).name} csatlakozott (${[...game.players.keys()].filter((id) => id !== teacherId).length} fő)`, 'ok');
+      if (isNew && game.players.has(p.id)) joins.add(game.players.get(p.id).name);
       if (t === 'solution' && Object.keys(game.bandSolvedBy).length > solvedBefore) toast(`🏆 ${playerName(p.id)} megfejtette!`, 'ok');
-      if (t === 'guess' || t === 'solution') ghosts.delete(p?.id);
+      if (t === 'guess' || t === 'solution') { ghosts.delete(p?.id); typingOut.delete(p?.id); }
     },
     onPresence: (ids) => { lastPresence = ids; game.setPresence(withTeacher(ids)); },
     onStatus: (s) => {
@@ -371,6 +390,10 @@ export function hostPage(root, code) {
   return () => {
     clearInterval(tick);
     clearInterval(heartbeat);
+    clearTimeout(typingTimer);
+    cancelAnimationFrame(gridFrame);
+    game.dispose();
+    joins.dispose();
     answers.destroy();
     window.removeEventListener('beforeunload', warn);
     document.querySelector('.qr-overlay')?.remove();

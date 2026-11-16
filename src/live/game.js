@@ -3,6 +3,7 @@
 
 import { publicView } from '../crossword/generator.js';
 import { tokenize, sameTokens } from '../crossword/hu.js';
+import { safeName } from './names.js';
 
 export const MODES = {
   coop: { label: 'Közös megoldás', desc: 'Mindenki ugyanazt a rejtvényt tölti, élőben látjátok egymás gépelését.' },
@@ -27,6 +28,9 @@ export class HostGame {
     this.turnSeconds = opts.turnSeconds ?? 60;
     this.send = send;
     this.onChange = onChange;
+    // >0: a gyakori (belépés, jelenlét, válasz) állapotküldéseket ennyi ms-onként összevonjuk
+    this.coalesceMs = opts.coalesceMs ?? 0;
+    this.bTimer = null;
     this.status = 'lobby';
     this.players = new Map(); // id -> {id,name,color,score,online,joinedAt,solvedRows:Set,solvedBands:Set,finishedAt}
     this.solved = {}; // közös/körös: row -> {by}
@@ -76,8 +80,22 @@ export class HostGame {
   }
 
   broadcast() {
+    clearTimeout(this.bTimer);
+    this.bTimer = null;
     this.send('state', this.publicState());
     this.onChange();
+  }
+
+  /** Gyakori változásoknál: több esemény egyetlen állapotüzenetben (100 diáknál is kezelhető forgalom). */
+  broadcastSoon() {
+    if (!this.coalesceMs) { this.broadcast(); return; }
+    if (this.bTimer) return;
+    this.bTimer = setTimeout(() => { this.bTimer = null; this.broadcast(); }, this.coalesceMs);
+  }
+
+  dispose() {
+    clearTimeout(this.bTimer);
+    this.bTimer = null;
   }
 
   // ---- bejövő üzenetek ----
@@ -94,7 +112,7 @@ export class HostGame {
 
   onHello({ id, name }) {
     if (!id) return;
-    const clean = String(name || '').trim().slice(0, 24) || 'Névtelen';
+    const clean = safeName(name); // a diák kliense megkerülhető: itt is szűrünk
     let pl = this.players.get(id);
     if (!pl) {
       pl = {
@@ -112,7 +130,7 @@ export class HostGame {
     } else {
       pl.online = true;
     }
-    this.broadcast();
+    this.broadcastSoon();
   }
 
   setPresence(ids) {
@@ -125,7 +143,7 @@ export class HostGame {
       if (this.mode === 'turns' && this.status === 'playing' && this.turn && !this.players.get(this.turn.playerId)?.online) {
         this.nextTurn();
       } else {
-        this.broadcast();
+        this.broadcastSoon();
       }
     }
   }
@@ -176,7 +194,7 @@ export class HostGame {
     if (this.mode === 'race' && pl.solvedRows.size === this.puzzle.rows.length && !pl.finishedAt) {
       pl.finishedAt = this.now();
     }
-    this.broadcast();
+    this.broadcastSoon();
   }
 
   onSolution({ id, band, text }) {
@@ -206,7 +224,7 @@ export class HostGame {
       this.nextTurn();
       return;
     }
-    this.broadcast();
+    this.broadcastSoon();
   }
 
   /** A megfejtés egyes mezőit lefedő sorok (bejegyzések) indexei. */

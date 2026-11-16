@@ -135,12 +135,17 @@ export async function openPlayerRoom(code, me, handlers) {
   }
 
   async function onWire(t, p) {
-    if (t !== 'H' || !p?.d || !p?.sig) return; // csak a tanár aláírt üzeneteit fogadjuk el
-    if (!(await trust(p.k))) return;
-    if (!(await verify(p.k.s, p.d, p.sig))) return;
+    if (t !== 'H' || typeof p?.d !== 'string' || !p?.sig) return; // csak a tanár aláírt üzeneteit fogadjuk el
     let d;
     try { d = JSON.parse(p.d); } catch { return; }
+    // Gyors szűrés az aláírás-ellenőrzés előtt: a más diáknak szóló és a régi üzenetet
+    // ellenőrzés nélkül eldobhatjuk (eldobni biztonságos, elfogadni csak ellenőrzés után).
+    if (!d || typeof d !== 'object') return;
+    if (d.t === 'enc' && d.to !== me.id) return;
     if (!(d.ts > lastTs)) return; // régi (visszajátszott) üzenet
+    if (!(await trust(p.k))) return;
+    if (!(await verify(p.k.s, p.d, p.sig))) return;
+    if (!(d.ts > lastTs)) return; // az ellenőrzés közben érkezhetett újabb
     lastTs = d.ts;
     if (!host || host.d !== p.k.d) {
       host = { s: p.k.s, d: p.k.d, aes: await sharedKey(myPriv, p.k.d) };

@@ -5,6 +5,8 @@ import { tokenize } from '../crossword/hu.js';
 import { openPlayerRoom } from '../live/secureroom.js';
 import { miniClient } from './miniplay.js';
 import { MODES, POINTS } from '../live/game.js';
+import { throttle, TYPING_MS } from '../live/throttle.js';
+import { isBadName, BAD_NAME_MESSAGE } from '../live/names.js';
 
 function playerId(code) {
   const k = `pastewall.player.${code}`;
@@ -17,12 +19,21 @@ function playerId(code) {
 export function joinPage(root, presetCode = '') {
   const code = h('input', { class: 'input big code-input', placeholder: 'KÓD', maxlength: 6, value: presetCode, autocapitalize: 'characters' });
   const name = h('input', { class: 'input big', placeholder: 'A neved', maxlength: 24, value: localStorage.getItem('pastewall.name') || '' });
+  const nameError = h('div', { class: 'name-error', role: 'alert', hidden: true }, BAD_NAME_MESSAGE);
+  const checkName = () => {
+    const bad = isBadName(name.value);
+    nameError.hidden = !bad;
+    name.classList.toggle('bad', bad);
+    return !bad;
+  };
+  name.addEventListener('input', checkName);
   const go = (e) => {
     e?.preventDefault();
     const c = code.value.trim().toUpperCase();
     const n = name.value.trim();
     if (c.length !== 6) { toast('A kód 6 karakter.', 'warn'); return; }
     if (!n) { toast('Írd be a neved!', 'warn'); return; }
+    if (!checkName()) { name.focus(); name.select(); return; }
     localStorage.setItem('pastewall.name', n);
     sessionStorage.setItem(`pastewall.joined.${c}`, '1');
     const target = `#/play/${c}`;
@@ -32,10 +43,11 @@ export function joinPage(root, presetCode = '') {
   };
   fill(root, h('div', { class: 'page narrow' }, h('form', { class: 'card join', onsubmit: go },
     h('h2', {}, 'Belépés a játékba'),
-    code, name,
+    code, name, nameError,
     h('button', { class: 'btn primary big', type: 'submit' }, 'Belépek'),
     h('a', { href: '#/', class: 'muted' }, '← Kezdőlap'),
   )));
+  checkName();
   (presetCode ? name : code).focus();
 }
 
@@ -63,11 +75,17 @@ function crosswordClient(root, ctx) {
   const pname = (id) => st?.players.find((p) => p.id === id)?.name || '?';
   const pcolor = (id) => st?.players.find((p) => p.id === id)?.color || '#999';
 
+  const sendTyping = throttle((row, tokens) => ctx.send('typing', { id: me.id, row, tokens }), TYPING_MS);
+  const applyTyping = (p) => {
+    if (!p || p.id === me.id) return;
+    if (Array.isArray(p.tokens) && p.tokens.some(Boolean)) ghosts.set(p.id, { row: p.row, tokens: p.tokens, at: Date.now() });
+    else ghosts.delete(p.id);
+  };
   const answers = new AnswerController({
     getPub: () => st?.puzzle,
     canAnswer,
-    onSubmit: (row, tokens) => { lastGuess = { row, tokens, at: Date.now(), tries: 0 }; ctx.send('guess', { id: me.id, row, tokens }); },
-    onTyping: (row, tokens) => { if (shared()) ctx.send('typing', { id: me.id, row, tokens: tokens.some(Boolean) ? tokens : [] }); },
+    onSubmit: (row, tokens) => { sendTyping.cancel(); lastGuess = { row, tokens, at: Date.now(), tries: 0 }; ctx.send('guess', { id: me.id, row, tokens }); },
+    onTyping: (row, tokens) => { if (shared()) sendTyping(row, tokens.some(Boolean) ? tokens : []); },
     onChange: () => renderGrid(),
   });
 
@@ -278,12 +296,10 @@ function crosswordClient(root, ctx) {
         if (!st.players.some((x) => x.id === me.id)) ctx.hello();
         render();
       } else if (t === 'result') onResult(p);
-      else if (t === 'typing' && p?.id !== me.id && shared()) {
-        if (p.tokens?.some(Boolean)) ghosts.set(p.id, { row: p.row, tokens: p.tokens, at: Date.now() }); else ghosts.delete(p.id);
-        renderGrid();
-      }
+      else if (t === 'typing' && shared()) { applyTyping(p); renderGrid(); } // régebbi tanári kliens
+      else if (t === 'typingBatch' && shared() && Array.isArray(p?.items)) { p.items.forEach(applyTyping); renderGrid(); }
     },
-    destroy() { answers.destroy(); clearInterval(timer); },
+    destroy() { sendTyping.cancel(); answers.destroy(); clearInterval(timer); },
   };
 }
 
@@ -293,7 +309,7 @@ function crosswordClient(root, ctx) {
  */
 export function playPage(root, code) {
   const name = localStorage.getItem('pastewall.name');
-  if (!name || !sessionStorage.getItem(`pastewall.joined.${code}`)) { joinPage(root, code); return undefined; }
+  if (!name || isBadName(name) || !sessionStorage.getItem(`pastewall.joined.${code}`)) { joinPage(root, code); return undefined; }
 
   const me = { id: playerId(code), name, role: 'player' };
   let room = null;

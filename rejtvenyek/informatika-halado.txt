@@ -1,0 +1,52 @@
+Elágazás - Programszerkezet, amely egy feltételtől függően más-más utasítást hajt végre
+Függvény - Névvel ellátott, többször meghívható programrész, amely értéket ad vissza
+Tömb - Azonos típusú elemek sorszámozott sorozata a programban
+Index - Egy tömbelem sorszáma (sok nyelvben 0-tól indul)
+Szintaxis - A programozási nyelv „helyesírása”, nyelvtani szabályai
+Rekurzió - Amikor egy függvény önmagát hívja meg
+Megjegyzés - A programkódban lévő magyarázó szöveg, amit a gép nem hajt végre
+Fordító - A forráskódot gépi kódra alakító program (compiler)
+Bug - A programhiba angol neve (szó szerint: bogár)
+String - A szöveges adattípus (karakterlánc) angol neve
+Python - Népszerű programozási nyelv, a Monty Python csoportról nevezték el
+Scratch - Színes blokkokból építkező programozási környezet kezdőknek
+Bináris - A kettes számrendszer másik neve (csak 0 és 1)
+Tizenhatos - Ebben a számrendszerben a számjegyek 0–9 és A–F
+Terabájt - Körülbelül ezer gigabájt
+ASCII - Az angol ábécé betűit 7 biten kódoló régi szabvány
+Unicode - A világ szinte minden írásjelét (ő, ű, emoji) kódoló szabvány
+Tömörítés - A fájl méretének csökkentése (pl. ZIP)
+Adatbázis - Rendszerezetten, táblákban tárolt adatok gyűjteménye
+Titkosítás - Az adat átalakítása úgy, hogy csak a kulcs birtokosa olvashassa
+SSD - Mozgó alkatrész nélküli, gyors háttértár
+Videokártya - A monitoron megjelenő képet előállító egység (GPU)
+Mag - A processzor önálló végrehajtó egysége; ma egy processzorban több is van
+Órajel - A processzor ütemét adó jel, gigahertzben mérjük
+BIOS - Bekapcsoláskor elsőként induló, az alaplapon tárolt alapprogram (ma: UEFI)
+Ventilátor - A processzor hűtését segítő forgó alkatrész
+Felbontás - A kép képpontjainak száma (pl. 1920×1080)
+Vektorgrafika - Alakzatokból felépülő kép, nagyítva sem lesz recés
+Protokoll - Kommunikációs szabályrendszer a hálózaton (pl. HTTP, TCP)
+Szerver - Más gépeket kiszolgáló számítógép
+Kliens - A szervertől szolgáltatást kérő gép vagy program
+Sávszélesség - A hálózati adatátvitel sebessége (pl. Mbit/s)
+Ping - Két gép közötti válaszidő mérésére szolgáló parancs
+Port - Hálózati „ajtószám”, a webszervereké általában 80 vagy 443
+Domain - A weboldal neve a címben, pl. wikipedia.org
+DNS - A domainneveket IP-címekre fordító „internetes telefonkönyv”
+Bluetooth - Rövid hatótávú vezeték nélküli kapcsolat, pl. fülhallgatóhoz
+HTTPS - A weboldalak titkosított átviteli protokollja (lakat a címsorban)
+HTML - A weboldalak szerkezetét leíró jelölőnyelv
+URL - Egy weboldal vagy fájl teljes internetes címe
+Link - Kattintható hivatkozás egy másik oldalra
+Süti - A weboldal által a böngészőben tárolt kis adat (cookie)
+Adathalászat - Csaló üzenet, amely jelszót vagy bankkártyaadatot próbál megszerezni
+Zsarolóvírus - A fájlokat titkosító, majd váltságdíjat követelő kártevő
+Trójai - Hasznos programnak álcázott kártékony szoftver
+Frissítés - A programok hibáit és biztonsági réseit javító új verzió telepítése
+Chatbot - Emberi nyelven beszélgető program
+Neumann - A mai számítógépek felépítési elvét leíró magyar származású tudós (János)
+Turing - Angol matematikus, a számítástudomány egyik atyja (Alan)
+Kemény - A BASIC programozási nyelv magyar származású társalkotója (János)
+Lovelace - Az első programozónak tartott nő (Ada)
+Kempelen - A híres sakkozógép, a „török” magyar készítője (Farkas)

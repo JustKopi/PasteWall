@@ -6,6 +6,7 @@ import { getActivity } from '../store.js';
 import { MiniHost } from '../live/minihost.js';
 import { openHostRoom, hasHostKeys } from '../live/secureroom.js';
 import { isOnline } from '../config.js';
+import { joinNotifier } from './joins.js';
 import { GAMES } from '../games/registry.js';
 import { parseContent, prepareRound } from '../games/content.js';
 
@@ -105,12 +106,13 @@ export function miniHostPage(root, code) {
     }
   }, 1000);
 
+  const joins = joinNotifier(() => game.players.size);
   openHostRoom(code, {
     onBlocked: (name) => toast(`🔒 ${name || 'Valaki'} be akart lépni, de a szoba le van zárva.`, 'warn'),
     onMessage: (t, p) => {
       const isNew = t === 'hello' && p?.id && !game.players.has(p.id);
       game.handle(t, p);
-      if (isNew && game.players.has(p.id)) toast(`👋 ${game.players.get(p.id).name} csatlakozott (${game.players.size} fő)`, 'ok');
+      if (isNew && game.players.has(p.id)) joins.add(game.players.get(p.id).name);
     },
     onPresence: (ids) => { ids.delete(hostId); game.setPresence(ids); },
     onStatus: (s) => {
@@ -125,5 +127,5 @@ export function miniHostPage(root, code) {
   const warn = (e) => { if (game.status === 'playing' || game.players.size) { e.preventDefault(); e.returnValue = ''; } };
   window.addEventListener('beforeunload', warn);
   render();
-  return () => { clearInterval(tick); clearInterval(heartbeat); head.destroy(); document.querySelector('.modal-back')?.remove(); window.removeEventListener('beforeunload', warn); room?.close(); };
+  return () => { clearInterval(tick); clearInterval(heartbeat); joins.dispose(); head.destroy(); document.querySelector('.modal-back')?.remove(); window.removeEventListener('beforeunload', warn); room?.close(); };
 }

@@ -1,0 +1,81 @@
+Bit - Bináris számjegy (0 vagy 1) – angolul is ugyanígy hívjuk
+Octet - Oktett: 8 bites csoport, az IPv4-cím négy ilyenből áll
+Network portion - Hálózati rész: az IP-cím hálózatot azonosító része
+Host portion - Host rész: az IP-cím eszközt azonosító része
+Prefix - A /24 jelölés neve (magyarul is így mondjuk)
+Prefix length - Prefixhossz: hány bit tartozik a hálózati részhez
+Subnet - Alhálózat
+Subnetting - Alhálózatokra bontás
+Subnet mask - Alhálózati maszk, pl. 255.255.255.0
+Network address - Hálózati cím: a tartomány első címe
+Broadcast address - Broadcast cím: a tartomány utolsó címe, mindenkinek szól
+Usable - Használható (usable host address = kiosztható hostcím)
+Address range - Címtartomány
+Block size - Blokkméret: egy alhálózat címeinek száma
+Private - Privát (… IP address: pl. 192.168.x.x)
+Public - Publikus (… IP address: az interneten is elérhető cím)
+Binary - Bináris, kettes számrendszerbeli
+Decimal - Tízes számrendszer (decimális)
+Interface - Interfész: az eszköz hálózati csatlakozási pontja
+Configuration - Konfiguráció, beállítások összessége
+Running - Futó (… configuration: a RAM-ban lévő, éppen érvényes beállítás)
+Startup - Indítási (… configuration: az NVRAM-ban tárolt, induláskor betöltött beállítás)
+Save - Ment (… the configuration: konfiguráció mentése)
+Hostname - Eszköznév
+Routing - Útválasztás
+Local network - Helyi hálózat
+Remote network - Távoli hálózat
+Router - Útválasztó: hálózatok között továbbítja a csomagokat
+Switch - Kapcsoló: a helyi hálózat eszközeit köti össze
+Gateway - Átjáró (default … = alapértelmezett átjáró)
+Default - Alapértelmezett
+Packet - Csomag: a 3. réteg adategysége
+Frame - Keret: a 2. réteg adategysége
+Header - Fejléc: a csomag elején lévő vezérlő adatok
+Layer - Réteg (pl. az OSI-modell hét …-e)
+Protocol - Protokoll, kommunikációs szabályrendszer
+Bandwidth - Sávszélesség
+Latency - Késleltetés, válaszidő
+Throughput - Tényleges átviteli sebesség
+Wireless - Vezeték nélküli
+Wired - Vezetékes
+Cable - Kábel
+Copper - Réz (… cable = rézkábel)
+Fiber - Optikai szál, üvegszál
+Twisted pair - Sodrott érpár
+Firewall - Tűzfal
+Server - Kiszolgáló
+Client - Ügyfél, kliens
+Static - Statikus, kézzel beállított (pl. … route)
+Dynamic - Dinamikus, automatikusan változó (pl. DHCP-vel kapott cím)
+Lease - Bérlet: amennyi ideig a DHCP-vel kapott cím érvényes
+Route - Útvonal
+Routing table - Útválasztási tábla
+Hop - Ugrás: egy útválasztón való áthaladás
+Neighbor - Szomszéd (szomszédos eszköz)
+Loopback - Visszacsatolási cím, pl. 127.0.0.1
+Unicast - Egyedi címzés: egy feladó, egy címzett
+Multicast - Csoportos címzés: egy feladó, egy csoport
+Collision - Ütközés (két eszköz egyszerre ad)
+Duplex - Kétirányú átvitel (full … = egyszerre mindkét irányba)
+Wildcard mask - Helyettesítő maszk (ACL-ekben használjuk)
+Access list - Hozzáférési lista (ACL)
+Trunk - Több VLAN forgalmát szállító kapcsolat a switchek között
+Ethernet - A legelterjedtebb vezetékes helyi hálózati szabvány
+Command - Parancs
+Prompt - Parancssori jel, pl. Router#
+Password - Jelszó
+Encryption - Titkosítás
+Enable - Engedélyez; Cisco-parancs a privilegizált módba lépéshez
+Privileged - Kiváltságos (… EXEC mode = privilegizált mód)
+Global - Globális (… configuration mode = globális konfigurációs mód)
+Console - Konzol (… port = konzolport a kezdeti beállításhoz)
+Terminal - Terminál (configure … = belépés a konfigurációs módba)
+Shutdown - Leállítás (no … = az interfész bekapcsolása)
+Banner - Belépéskor megjelenő figyelmeztető üzenet (… motd)
+Reload - Újraindítás (Cisco-parancs)
+Erase - Törlés (… startup-config)
+Copy - Másolás (… running-config startup-config)
+Upload - Feltöltés
+Download - Letöltés
+Byte - Bájt: 8 bit

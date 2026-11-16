@@ -3,6 +3,7 @@
 // (titkosítva, csak neki), a választ itt ellenőrizzük, a pontot és az időt itt számoljuk.
 
 import { COLORS } from './game.js';
+import { safeName } from './names.js';
 import { createSession } from '../games/server.js';
 
 /** A képeket (data URL) külön, nyilvános üzenetekben küldjük; a tartalomban csak kulcs marad. */
@@ -75,11 +76,14 @@ export class MiniHost {
   }
 
   broadcast() {
+    clearTimeout(this.bTimer);
+    this.bTimer = null;
     this.send('state', this.publicState());
+    if (this.contentDue) { this.contentDue = false; this.sendContent(); }
     this.onChange();
   }
 
-  /** Gyakori változásoknál (sok válasz) ritkítva küldjük az állapotot. */
+  /** Gyakori változásoknál (sok válasz, sok belépés) ritkítva küldjük az állapotot. */
   broadcastSoon() {
     if (this.bTimer) return;
     this.bTimer = setTimeout(() => { this.bTimer = null; this.broadcast(); }, 250);
@@ -111,11 +115,11 @@ export class MiniHost {
     if (!id) return;
     let pl = this.players.get(id);
     if (!pl) {
-      pl = newPlayer(id, String(name || '').trim().slice(0, 24) || 'Névtelen', COLORS[this.players.size % COLORS.length], this.now());
+      pl = newPlayer(id, safeName(name), COLORS[this.players.size % COLORS.length], this.now());
       this.players.set(id, pl);
     } else pl.online = true;
-    this.broadcast();
-    this.sendContent();
+    this.contentDue = true;
+    this.broadcastSoon();
   }
 
   sessionFor(id) {
@@ -157,7 +161,7 @@ export class MiniHost {
       const on = ids.has(pl.id);
       if (pl.online !== on) { pl.online = on; changed = true; }
     }
-    if (changed) this.broadcast();
+    if (changed) this.broadcastSoon();
   }
 
   kick(id) {
