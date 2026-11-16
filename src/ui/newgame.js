@@ -3,6 +3,7 @@ import { h } from './dom.js';
 import { listPuzzles, listActivities } from '../store.js';
 import { GAMES } from '../games/registry.js';
 import { MODES } from '../live/game.js';
+import { gameOptionsUI } from './gameopts.js';
 
 /**
  * @param {{currentId?:string, mode?:string, onPick:(pick:{kind:'crossword'|'mini', id:string, mode?:string})=>void}} o
@@ -15,7 +16,8 @@ export function newGameDialog(o) {
   let picked = items.find((x) => x.id !== o.currentId) || items[0];
   const modeSel = h('select', { class: 'input' }, Object.entries(MODES).map(([k, m]) => h('option', { value: k, selected: k === (o.mode || 'coop') }, m.label)));
   const modeRow = h('label', { class: 'row-label' }, 'Keresztrejtvénynél a játékmód: ', modeSel);
-  const syncMode = () => { modeRow.hidden = picked?.kind !== 'crossword'; };
+  const opts = gameOptionsUI(o.options);
+  const syncMode = () => { modeRow.hidden = picked?.kind !== 'crossword'; opts.el.hidden = modeRow.hidden; };
   const close = () => back.remove();
   const back = h('div', { class: 'modal-back', onclick: (e) => { if (e.target === back) close(); } },
     h('div', { class: 'modal' },
@@ -25,8 +27,9 @@ export function newGameDialog(o) {
         h('input', { type: 'radio', name: 'pick', checked: x === picked, onchange: () => { picked = x; syncMode(); } }),
         h('div', {}, h('strong', {}, x.title), h('div', { class: 'muted small' }, x.sub, x.id === o.currentId ? ' · (a mostani)' : ''))))) : h('p', {}, 'Nincs mentett játék. Előbb készíts egyet.'),
       modeRow,
+      opts.el,
       h('div', { class: 'actions' },
-        h('button', { class: 'btn primary', disabled: !items.length, onclick: () => { close(); o.onPick({ kind: picked.kind, id: picked.id, mode: modeSel.value }); } }, 'Betöltés'),
+        h('button', { class: 'btn primary', disabled: !items.length, onclick: () => { close(); o.onPick({ kind: picked.kind, id: picked.id, mode: modeSel.value, ...(picked.kind === 'crossword' ? opts.value() : {}) }); } }, 'Betöltés'),
         h('button', { class: 'btn ghost', onclick: close }, 'Mégse'),
         h('a', { class: 'btn ghost', href: '#/', target: '_blank', rel: 'noopener' }, '+ Új játék készítése (új lapon)'),
       )));
@@ -38,7 +41,7 @@ export function newGameDialog(o) {
 export function switchRoomGame(code, pick, players, round) {
   const cfg = pick.kind === 'mini'
     ? { kind: 'mini', activityId: pick.id, players, round }
-    : { kind: 'crossword', puzzleId: pick.id, mode: pick.mode || 'coop', turnSeconds: 60, players, round };
+    : { kind: 'crossword', puzzleId: pick.id, mode: pick.mode || 'coop', turnSeconds: 60, scoring: pick.scoring, boosts: pick.boosts, players, round };
   sessionStorage.setItem(`pastewall.host.${code}`, JSON.stringify(cfg));
   window.dispatchEvent(new HashChangeEvent('hashchange'));
 }

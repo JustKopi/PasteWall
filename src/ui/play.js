@@ -1,10 +1,10 @@
 import { h, fill, toast } from './dom.js';
-import { makeGridView, renderClues, knownBandLetter } from './grid.js';
+import { makeGridView, renderClues, knownBandLetter, zoomBar, entryLabel } from './grid.js';
 import { AnswerController } from './answer.js';
 import { tokenize } from '../crossword/hu.js';
 import { openPlayerRoom } from '../live/secureroom.js';
 import { miniClient } from './miniplay.js';
-import { MODES, POINTS } from '../live/game.js';
+import { MODES, POINTS, BOOSTS } from '../live/game.js';
 import { throttle, TYPING_MS } from '../live/throttle.js';
 import { isBadName, BAD_NAME_MESSAGE } from '../live/names.js';
 
@@ -66,12 +66,14 @@ function crosswordClient(root, ctx) {
   let gridView = null;
   let lastGuess = null;
   let lastSolution = null; // verseny módban a saját helyes válasz betűi kellenek
+  let boostReq = null; // folyamatban lévő boost-kérés (elveszett válasz esetén újraküldjük)
+  let pollVote = null; // a saját szavazatom (sor), amíg a szavazás tart
 
   const shared = () => st && st.mode !== 'race';
   const myTurn = () => st?.mode === 'turns' && st.turn?.playerId === me.id;
   const canAnswer = () => st?.status === 'playing' && !st.revealed && (st.mode !== 'turns' || myTurn());
   const canGuessSolution = () => st?.status === 'playing' && !st.revealed; // a megfejtést bárki tippelheti, bármikor
-  const isSolved = (r) => (shared() ? Boolean(st.solved[r]) : mine.has(r));
+  const isSolved = (r) => (shared() ? Boolean(st.solved[r]) : mine.has(r) || Boolean(st.shown?.[r]));
   const pname = (id) => st?.players.find((p) => p.id === id)?.name || '?';
   const pcolor = (id) => st?.players.find((p) => p.id === id)?.color || '#999';
 
@@ -94,6 +96,10 @@ function crosswordClient(root, ctx) {
   const lobby = h('div', { class: 'card lobby' });
   const turnBox = h('div', { class: 'turn-box' });
   const gridBox = h('div', { class: 'grid-box' });
+  const gridCard = h('div', { class: 'card grid-card' });
+  const zoom = zoomBar(gridCard, 'play');
+  const boostBox = h('div', { class: 'card boost-card' });
+  const pollBox = h('div', { class: 'card poll-card' });
   const legend = h('div', { class: 'band-legend' });
 
   const solBand = h('select', { class: 'input' });
@@ -102,11 +108,12 @@ function crosswordClient(root, ctx) {
     h('strong', {}, `Megfejtés tipp (+${POINTS.solution} pont, korán +${POINTS.solutionBonus})`),
     h('div', { class: 'ans-row' }, solBand, solInput, h('button', { class: 'btn', type: 'submit' }, 'Tippelek')),
     h('div', { class: 'muted small' }, 'Bárki tippelhet, csak a leggyorsabb kap pontot. Ha még a betűk fele sem látszik, jár a bónusz.'));
-  const cluesBox = h('div', { class: 'card clues-card' });
+  const cluesScroll = h('div', { class: 'clues-scroll' });
+  const cluesBox = h('div', { class: 'card clues-card' }, h('h3', {}, 'Meghatározások'), cluesScroll);
   const boardBox = h('div', { class: 'card mini-board' });
   const main = h('div', { class: 'play-main' },
     h('div', { class: 'play-left' }, turnBox, gridBox),
-    h('div', { class: 'play-side' }, answers.el, solForm, cluesBox, boardBox));
+    h('div', { class: 'play-side' }, answers.el, boostBox, pollBox, solForm, cluesBox, boardBox));
 
   fill(root, h('div', { class: 'page play' }, head, lobby, main));
 
@@ -114,6 +121,87 @@ function crosswordClient(root, ctx) {
     if (!canGuessSolution() || !solInput.value.trim()) return;
     lastSolution = tokenize(solInput.value, { digraphs: st.puzzle.digraphs !== false });
     ctx.send('solution', { id: me.id, band: Number(solBand.value), text: solInput.value });
+  }
+
+  function requestBoost(kind) {
+    if (boostReq || st?.status !== 'playing' || st.revealed) return;
+    let row = null;
+    let i = null;
+    if (kind !== 'double') {
+      row = answers.selected;
+      if (row == null || !canAnswer()) { toast('Előbb jelölj ki egy kérdést: koppints egy mezőre vagy meghatározásra.', 'warn'); return; }
+      if (kind === 'cell') {
+        i = answers.cursor;
+        if (answers.isLocked(i)) { toast('Ezt a betűt már tudod — állj egy másik mezőre.', 'warn'); return; }
+      }
+    }
+    boostReq = { kind, row, i, req: `${me.id}-${Date.now()}`, at: Date.now(), tries: 0 };
+    ctx.send('boost', { id: me.id, kind, row, i, req: boostReq.req });
+    render();
+  }
+
+  function onBoost(p) {
+    if (!p || !boostReq || p.req !== boostReq.req) return;
+    const req = boostReq;
+    boostReq = null;
+    if (!p.ok) { toast(p.reason || 'Most nem sikerült.', 'warn'); render(); return; }
+    if (p.kind === 'double') toast('✖️2 Dupla pont aktív: a következő helyes kérdésed kétszer annyit ér!', 'ok');
+    else {
+      answers.addHints(p.row, Array.isArray(p.letters) ? p.letters : []);
+      if (answers.selected !== req.row && canAnswer() && !isSolved(p.row)) answers.select(p.row, null, false);
+      toast(`⚡ ${BOOSTS[p.kind]?.label}: megkaptad a betű${p.letters?.length > 1 ? 'ket' : 't'}!`, 'ok');
+    }
+    render();
+  }
+
+  function renderBoosts(meP) {
+    const left = meP?.boostsLeft || {};
+    const kinds = Object.keys(left);
+    boostBox.hidden = st.status !== 'playing' || st.revealed || !kinds.length;
+    if (boostBox.hidden) return;
+    const pts = st.rowPoints && answers.selected != null ? st.rowPoints[answers.selected] : null;
+    fill(boostBox,
+      h('strong', {}, '⚡ Boostok'),
+      meP.double ? h('span', { class: 'muted small' }, ' · ✖️2 aktív a következő helyes válaszodra') : null,
+      h('div', { class: 'boosts' }, kinds.map((k) => {
+        const b = BOOSTS[k];
+        const needRow = k !== 'double';
+        const off = !left[k] || Boolean(boostReq) || (needRow && !canAnswer()) || (k === 'double' && meP.double);
+        return h('button', {
+          class: `btn small ${k === 'double' && meP.double ? 'boost-on' : ''}`,
+          type: 'button',
+          title: b.desc,
+          disabled: off,
+          onclick: () => requestBoost(k),
+        }, b.icon, ' ', b.label, h('span', { class: 'n' }, left[k]));
+      })),
+      h('div', { class: 'muted small' }, boostReq ? 'Kérés elküldve…'
+        : 'A betűs boostok a kijelölt kérdésre (az „Egy mező” a kurzor helyére) vonatkoznak.'),
+      pts != null ? h('div', { class: 'small' }, `Ez a kérdés most ${pts} pontot ér${meP.double ? ` (dupla: ${pts * 2})` : ''}.`) : null);
+  }
+
+  function renderPoll() {
+    pollBox.hidden = !st.poll || st.status !== 'playing' || st.revealed;
+    if (pollBox.hidden) { pollVote = null; return; }
+    if (pollVote != null && isSolved(pollVote)) pollVote = null;
+    const open = st.puzzle.rows.map((_, r) => r).filter((r) => !isSolved(r));
+    const key = JSON.stringify([open, pollVote]); // a más szavazatai miatt nem építjük újra (lenyitva maradhat)
+    if (pollBox.dataset.key === key) return; // ne rajzoljuk újra feleslegesen (a választó lenyitva maradhat)
+    pollBox.dataset.key = key;
+    const sel = h('select', { class: 'input' },
+      h('option', { value: -1 }, '— válassz kérdést —'),
+      open.map((r) => h('option', { value: r, selected: r === pollVote },
+        `${entryLabel(st.puzzle, r)}${st.puzzle.rows[r].clue || ''}`)));
+    sel.addEventListener('change', () => {
+      const r = Number(sel.value);
+      pollVote = r === -1 ? null : r;
+      ctx.send('pollVote', { id: me.id, row: r });
+      render();
+    });
+    fill(pollBox,
+      h('strong', {}, '🗳 Szavazás: melyik kérdést fedje fel a tanár?'),
+      h('div', { class: 'ans-row' }, sel),
+      h('div', { class: 'muted small' }, pollVote != null ? 'Leadtad a szavazatod — bármikor átszavazhatsz. A tanár dönt.' : 'Válaszd ki, melyikben kérnél segítséget.'));
   }
 
   function onResult(p) {
@@ -126,7 +214,7 @@ function crosswordClient(root, ctx) {
     if (p.kind === 'row') {
       if (p.correct) {
         if (lastGuess?.row === p.row) mine.set(p.row, lastGuess.tokens);
-        if (!p.repeat || answers.pending === p.row) toast(`Helyes! +${POINTS.row} pont`, 'ok');
+        if (!p.repeat || answers.pending === p.row) toast(`Helyes! +${p.points ?? POINTS.row} pont${p.doubled ? ' (✖️2 dupla!)' : ''}`, 'ok');
       } else {
         toast('Sajnos nem ez a megoldás.', 'bad');
       }
@@ -148,7 +236,8 @@ function crosswordClient(root, ctx) {
     const pz = st.puzzle;
     if (!gridView) {
       gridView = makeGridView(pz, { onRow: (r, i) => { if (canAnswer() && !isSolved(r)) answers.select(r, i); } });
-      fill(gridBox, h('div', { class: 'card grid-card' }, gridView.el, legend));
+      fill(gridCard, zoom, gridView.el, legend);
+      fill(gridBox, gridCard);
     }
     const now = Date.now();
     for (const [id, g] of ghosts) if (now - g.at > 5000 || isSolved(g.row)) ghosts.delete(id);
@@ -158,6 +247,7 @@ function crosswordClient(root, ctx) {
         if (st.revealAll && !(shared() && st.solved[r]) && !mine.has(r)) return { text: st.revealAll[r][i], cls: 'revealed' };
         if (shared() && st.solved[r]) return { text: st.solved[r].tokens[i], cls: 'solved', color: st.solved[r].by ? pcolor(st.solved[r].by) : null };
         if (mine.has(r)) return { text: mine.get(r)[i], cls: 'solved', color: pcolor(me.id) };
+        if (!shared() && st.shown?.[r]) return { text: st.shown[r][i], cls: 'revealed' };
         const d = answers.cellInfo(r, i);
         if (d) return d;
         const bl = knownBandLetter(pz, st.bands.map((b, k) => b.tokens || (myBands.has(k) && myBandTokens.get(k)) || null), r, i);
@@ -193,6 +283,10 @@ function crosswordClient(root, ctx) {
     myBandTokens.clear();
     ghosts.clear();
     answers.reset();
+    boostReq = null;
+    pollVote = null;
+    pollBox.dataset.key = '';
+    cluesScroll.dataset.key = '';
     lastTurnKey = null;
     solInput.value = '';
     solBand.replaceChildren();
@@ -248,6 +342,8 @@ function crosswordClient(root, ctx) {
 
     answers.el.hidden = st.status !== 'playing' || !canAnswer();
     answers.render();
+    renderBoosts(meP);
+    renderPoll();
 
     solForm.hidden = !canGuessSolution() || !st.puzzle.bands.length || st.bands.every((b, k) => b.tokens || myBands.has(k));
     if (solBand.options.length !== st.puzzle.bands.length) {
@@ -255,10 +351,21 @@ function crosswordClient(root, ctx) {
     }
     solBand.hidden = st.puzzle.bands.length <= 1;
 
-    fill(cluesBox, h('h3', {}, 'Meghatározások'), h('div', { class: 'clues-scroll' }, renderClues(st.puzzle, {
-      cls: (r) => ((shared() && st.solved[r]?.by) || mine.has(r) ? 'done' : r === answers.selected ? 'selected' : isSolved(r) || st.revealAll ? 'revealed' : ''),
-      onRow: canAnswer() ? (r) => { if (!isSolved(r)) answers.select(r); } : null,
-    })));
+    // A listát csak akkor építjük újra, ha a saját nézetünkben tényleg változott valami.
+    // (Korábban minden állapotüzenetnél — pl. ha egy másik diák megfejtett egy sort — újraépült,
+    // és a görgetés visszaugrott: telefonon úgy tűnt, mintha mindenkinek "odaugrana".)
+    const clueCls = (r) => ((shared() && st.solved[r]?.by) || mine.has(r) ? 'done' : r === answers.selected ? 'selected' : isSolved(r) || st.revealAll ? 'revealed' : '');
+    const clickable = canAnswer();
+    const clueKey = JSON.stringify([round, clickable, st.puzzle.rows.map((_, r) => clueCls(r))]);
+    if (cluesScroll.dataset.key !== clueKey) {
+      cluesScroll.dataset.key = clueKey;
+      const top = cluesScroll.scrollTop;
+      fill(cluesScroll, renderClues(st.puzzle, {
+        cls: clueCls,
+        onRow: clickable ? (r) => { if (!isSolved(r)) answers.select(r); } : null,
+      }));
+      cluesScroll.scrollTop = top;
+    }
 
     const players = [...st.players].sort((a, b) => b.score - a.score);
     fill(boardBox, h('h3', {}, 'Állás'), h('ol', { class: 'players' }, players.slice(0, 10).map((p) => h('li', { class: `${p.online ? '' : 'offline'} ${p.id === me.id ? 'me' : ''}` },
@@ -280,6 +387,12 @@ function crosswordClient(root, ctx) {
       lastGuess.at = Date.now(); lastGuess.tries++;
       ctx.send('guess', { id: me.id, row: lastGuess.row, tokens: lastGuess.tokens });
     }
+    if (boostReq && Date.now() - boostReq.at > 3000) {
+      if (boostReq.tries < 3) {
+        boostReq.at = Date.now(); boostReq.tries++;
+        ctx.send('boost', { id: me.id, kind: boostReq.kind, row: boostReq.row, i: boostReq.i, req: boostReq.req });
+      } else { boostReq = null; toast('Nem jött válasz a tanári géptől — próbáld újra.', 'warn'); render(); }
+    }
     if (lastGuess && answers.pending === lastGuess.row && lastGuess.tries >= 3 && Date.now() - lastGuess.at > 3000) {
       answers.result(lastGuess.row, false); lastGuess = null; toast('Nem jött válasz a tanári géptől — próbáld újra.', 'warn');
     }
@@ -296,6 +409,7 @@ function crosswordClient(root, ctx) {
         if (!st.players.some((x) => x.id === me.id)) ctx.hello();
         render();
       } else if (t === 'result') onResult(p);
+      else if (t === 'boost') onBoost(p);
       else if (t === 'typing' && shared()) { applyTyping(p); renderGrid(); } // régebbi tanári kliens
       else if (t === 'typingBatch' && shared() && Array.isArray(p?.items)) { p.items.forEach(applyTyping); renderGrid(); }
     },

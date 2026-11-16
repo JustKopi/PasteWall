@@ -1,6 +1,6 @@
 import QRCode from 'qrcode';
 import { h, fill, toast, download } from './dom.js';
-import { makeGridView, renderClues, knownBandLetter } from './grid.js';
+import { makeGridView, renderClues, knownBandLetter, zoomBar } from './grid.js';
 import { AnswerController } from './answer.js';
 import { getPuzzle } from '../store.js';
 import { newGameDialog, switchRoomGame } from './newgame.js';
@@ -9,6 +9,7 @@ import { openHostRoom, hasHostKeys } from '../live/secureroom.js';
 import { isOnline } from '../config.js';
 import { TYPING_MS } from '../live/throttle.js';
 import { joinNotifier } from './joins.js';
+import { gameOptionsUI } from './gameopts.js';
 
 export function hostPage(root, code) {
   const cfgKey = `pastewall.host.${code}`;
@@ -49,7 +50,10 @@ export function hostPage(root, code) {
   let locked = false;
 
   const game = new HostGame(
-    { puzzle: pz, title: doc.title, mode: cfg.mode, turnSeconds: cfg.turnSeconds, coalesceMs: 250 },
+    {
+      puzzle: pz, title: doc.title, mode: cfg.mode, turnSeconds: cfg.turnSeconds, coalesceMs: 250,
+      scoring: cfg.scoring, boosts: cfg.boosts, sendTo: (id, t, p) => room?.sendTo(id, t, p),
+    },
     (t, p) => room?.send(t, p),
     () => render(),
   );
@@ -109,6 +113,9 @@ export function hostPage(root, code) {
   const gridHolder = h('div');
   const legendBox = h('div', { class: 'band-legend' });
   const cluesBox = h('div', { class: 'clues-scroll' });
+  const pollBox = h('div');
+  const gridCard = h('div', { class: 'card grid-card' });
+  const zoom = zoomBar(gridCard, 'host');
   const boardBox = h('div', { class: 'board' });
   let gridView = null;
 
@@ -118,8 +125,10 @@ export function hostPage(root, code) {
     canAnswer: teacherCanAnswer,
     onSubmit: (row, tokens) => {
       const correct = game.checkRow(row, tokens);
+      const before = game.players.get(teacherId)?.score ?? 0;
       game.handle('guess', { id: teacherId, row, tokens });
-      toast(correct ? `Helyes! +${POINTS.row} pont` : 'Nem ez a megoldás.', correct ? 'ok' : 'bad');
+      const gained = (game.players.get(teacherId)?.score ?? 0) - before;
+      toast(correct ? `Helyes! +${gained || POINTS.row} pont` : 'Nem ez a megoldás.', correct ? 'ok' : 'bad');
       answers.result(row, correct);
     },
     onTyping: (row, tokens) => queueTyping(teacherId, row, tokens.some(Boolean) ? tokens : []),
@@ -155,8 +164,9 @@ export function hostPage(root, code) {
       turnBox,
       endedBox,
       h('div', { class: 'host-grid' },
-        h('div', { class: 'card grid-card' }, gridHolder, legendBox),
+        (fill(gridCard, zoom, gridHolder, legendBox), gridCard),
         h('div', { class: 'side' },
+          pollBox,
           teacherPanel,
           h('div', { class: 'card clues-card' }, h('h3', {}, 'Meghatározások'), cluesBox),
           boardBox),
@@ -167,6 +177,7 @@ export function hostPage(root, code) {
   const playerName = (id) => game.players.get(id)?.name || '?';
   const playerColor = (id) => game.players.get(id)?.color || '#999';
   let revealPick = null; // tanár által kijelölt sor a felfedéshez (ha nem játszik)
+  const isOpen = (r) => game.isOpenRow(r) && !game.revealed;
 
   // ---------- tanár mint játékos ----------
   function withTeacher(ids) {
@@ -190,9 +201,8 @@ export function hostPage(root, code) {
   }
 
   function onRowClick(r, i) {
-    if (game.solved[r] || game.revealed) return;
+    if (!isOpen(r)) return;
     if (teacherCanAnswer()) { revealPick = r; answers.select(r, i); render(); return; }
-    if (mode() === 'race') return;
     revealPick = revealPick === r ? null : r;
     render();
   }
@@ -206,11 +216,41 @@ export function hostPage(root, code) {
     if (gained) solInput.value = '';
   }
 
+  // ---------- élő beállítások (játék közben is) ----------
+  function settingsDialog() {
+    const opts = gameOptionsUI({ scoring: game.scoring, boosts: game.boosts });
+    const turnSel = h('select', { class: 'input' },
+      [30, 60, 90, 120, 0].map((s) => h('option', { value: s, selected: s === (game.turnSeconds || 0) }, s ? `${s} mp / kör` : 'nincs időkorlát')));
+    const close = () => back.remove();
+    const back = h('div', { class: 'modal-back', onclick: (e) => { if (e.target === back) close(); } },
+      h('div', { class: 'modal' },
+        h('h2', {}, '⚙ Beállítások'),
+        h('p', { class: 'muted' }, 'Játék közben is módosítható; azonnal érvényes mindenkinél. Egy boost kikapcsolásával a diákok gombja eltűnik, visszakapcsolva az eddigi felhasználások megmaradnak.'),
+        opts.el,
+        mode() === 'turns' ? h('label', { class: 'row-label' }, 'Körös játék ideje: ', turnSel) : null,
+        h('p', { class: 'muted small' }, 'A játékmódot új rejtvénynél lehet váltani („🎮 Új játék”).'),
+        h('div', { class: 'actions' },
+          h('button', {
+            class: 'btn primary',
+            onclick: () => {
+              const v = opts.value();
+              game.updateOptions({ ...v, turnSeconds: mode() === 'turns' ? Number(turnSel.value) : undefined });
+              const cur = JSON.parse(sessionStorage.getItem(cfgKey) || '{}');
+              sessionStorage.setItem(cfgKey, JSON.stringify({ ...cur, ...v, turnSeconds: game.turnSeconds }));
+              close();
+              toast('Beállítások mentve.', 'ok');
+            },
+          }, 'Mentés'),
+          h('button', { class: 'btn ghost', onclick: close }, 'Mégse'))));
+    document.body.append(back);
+  }
+
   // ---------- új rejtvény ugyanabban a szobában ----------
   function newPuzzleDialog() {
     newGameDialog({
       currentId: doc.id,
       mode: mode(),
+      options: { scoring: game.scoring, boosts: game.boosts },
       onPick: (pick) => {
         if (pick.kind !== 'crossword') {
           // másik típusú játék: a tanári oldal átvált, a bent lévők átkerülnek
@@ -222,12 +262,12 @@ export function hostPage(root, code) {
         if (!next) return;
         doc = next;
         pz = next.puzzle;
-        sessionStorage.setItem(cfgKey, JSON.stringify({ ...cfg, kind: 'crossword', puzzleId: next.id, mode: pick.mode, players: undefined }));
+        sessionStorage.setItem(cfgKey, JSON.stringify({ ...cfg, kind: 'crossword', puzzleId: next.id, mode: pick.mode, scoring: pick.scoring, boosts: pick.boosts, players: undefined }));
         ghosts.clear();
         answers.reset();
         revealPick = null;
         buildGrid();
-        game.loadPuzzle({ puzzle: pz, title: next.title, mode: pick.mode });
+        game.loadPuzzle({ puzzle: pz, title: next.title, mode: pick.mode, scoring: pick.scoring, boosts: pick.boosts });
         if (teacherPlays) game.setPresence(withTeacher(lastPresence));
         toast('Új rejtvény betöltve — indítsd el, ha mindenki kész!', 'ok');
       },
@@ -239,12 +279,13 @@ export function hostPage(root, code) {
     const st = game.publicState();
     const now = Date.now();
     for (const [id, g] of ghosts) if (now - g.at > 5000 || st.solved[g.row]) ghosts.delete(id);
-    gridView.setClickable(mode() !== 'race' || teacherCanAnswer());
+    gridView.setClickable(st.status === 'playing' && !st.revealed);
     const sel = answers.selected ?? revealPick;
     gridView.update(
       (r, i) => {
         if (st.revealAll && !st.solved[r]) return { text: st.revealAll[r][i], cls: 'revealed' };
         if (st.solved[r]) return { text: st.solved[r].tokens[i], cls: 'solved', color: st.solved[r].by ? playerColor(st.solved[r].by) : null };
+        if (st.shown[r]) return { text: st.shown[r][i], cls: 'revealed' };
         const d = answers.cellInfo(r, i);
         if (d) return d;
         const bl = knownBandLetter(pz, st.bands.map((b) => b.tokens), r, i);
@@ -253,7 +294,7 @@ export function hostPage(root, code) {
         return null;
       },
       (r) => {
-        const cls = r === sel ? 'selected' : st.solved[r]?.by ? 'done' : st.solved[r] || st.revealAll ? 'revealed-row' : '';
+        const cls = r === sel ? 'selected' : st.solved[r]?.by ? 'done' : st.solved[r] || st.shown[r] || st.revealAll ? 'revealed-row' : '';
         if (st.solved[r]?.by) return { cls, tag: { name: playerName(st.solved[r].by), color: playerColor(st.solved[r].by) } };
         const g = [...ghosts.entries()].find(([, x]) => x.row === r);
         if (g) return { cls, tag: { name: `${playerName(g[0])} gépel…`, color: playerColor(g[0]) } };
@@ -265,15 +306,18 @@ export function hostPage(root, code) {
   function render() {
     renderQrCount();
     const st = game.publicState();
-    if (revealPick != null && st.solved[revealPick]) revealPick = null;
+    if (revealPick != null && !isOpen(revealPick)) revealPick = null;
     titleLine.textContent = `${doc.title} · ${MODES[mode()].label}${st.round > 1 ? ` · ${st.round}. rejtvény` : ''}`;
     const entryName = (r) => (pz.type === 'free' ? `${pz.rows[r].num}. ${pz.rows[r].dir === 'across' ? 'vízszintes' : 'függőleges'}` : `${r + 1}. sor`);
 
     fill(controlsBox,
       st.status === 'lobby' ? h('button', { class: 'btn primary big', onclick: () => game.start(), disabled: !game.players.size }, '▶ Indítás') : null,
       st.status === 'playing' && mode() === 'turns' && !st.revealed ? h('button', { class: 'btn', onclick: () => game.nextTurn() }, '⏭ Következő játékos') : null,
-      st.status === 'playing' && mode() !== 'race' && revealPick != null && !st.solved[revealPick] && !st.revealed
-        ? h('button', { class: 'btn', onclick: () => { const r = revealPick; revealPick = null; answers.deselect(); game.revealRow(r); } }, `👁 ${entryName(revealPick)} felfedése`) : null,
+      st.status === 'playing' && revealPick != null && isOpen(revealPick)
+        ? h('button', { class: 'btn primary', onclick: () => { const r = revealPick; revealPick = null; answers.deselect(); game.revealRow(r); } }, `👁 ${entryName(revealPick)} felfedése`)
+        : null,
+      st.status === 'playing' && !st.revealed
+        ? h('button', { class: `btn ${st.poll ? 'primary' : ''}`, title: 'A diákok megszavazhatják, melyik kérdést fednéd fel (csak irányadó)', onclick: () => (st.poll ? game.stopPoll() : game.startPoll()) }, st.poll ? '🗳 Szavazás lezárása' : '🗳 Szavazás: mit fedjek fel?') : null,
       st.status === 'playing' && !st.revealed
         ? h('button', {
           class: 'btn',
@@ -286,6 +330,7 @@ export function hostPage(root, code) {
       st.status === 'playing' ? h('button', { class: 'btn danger', onclick: () => { if (confirm('Biztosan befejezed a játékot?')) game.end(); } }, '■ Játék vége') : null,
       st.status === 'ended' ? h('button', { class: 'btn', onclick: () => download(`${doc.title} - eredmények.csv`, game.resultsCsv(), 'text/csv') }, '⬇ Eredmények (Excel/CSV)') : null,
       st.status !== 'playing' || st.revealed ? h('button', { class: `btn ${st.status === 'ended' ? 'primary' : ''}`, onclick: newPuzzleDialog }, '🎮 Új játék (a bent lévőkkel)') : null,
+      st.status !== 'ended' ? h('button', { class: 'btn', title: 'Boostok, lépcsős pontozás, körös idő — játék közben is', onclick: settingsDialog }, '⚙ Beállítások') : null,
       h('a', { class: 'btn ghost', href: `#/edit/${doc.id}` }, 'Szerkesztő'),
     );
 
@@ -310,10 +355,31 @@ export function hostPage(root, code) {
           : st.status === 'ended' || st.revealed ? ` Megfejtés: ${b.text}`
             : ` ${k + 1}. megfejtés: ${b.length} betű${pz.type === 'free' ? (b.line ? ' (a kiemelt sorban)' : ' (a sorszámozott, kiemelt mezőkből)') : ''}`)));
     }
-    fill(cluesBox, renderClues(pz, {
-      cls: (r) => (st.solved[r]?.by ? 'done' : r === (answers.selected ?? revealPick) ? 'selected' : st.solved[r] || st.revealAll ? 'revealed' : ''),
-      onRow: mode() !== 'race' || teacherCanAnswer() ? (r) => onRowClick(r, null) : null,
-    }));
+    // a lista csak akkor épül újra, ha tényleg változott (különben görgetés közben visszaugrana)
+    const clueCls = (r) => (st.solved[r]?.by ? 'done' : r === (answers.selected ?? revealPick) ? 'selected' : st.solved[r] || st.shown[r] || st.revealAll ? 'revealed' : '');
+    const clueKey = JSON.stringify([st.round, pz.rows.map((_, r) => clueCls(r))]);
+    if (cluesBox.dataset.key !== clueKey) {
+      cluesBox.dataset.key = clueKey;
+      const top = cluesBox.scrollTop;
+      fill(cluesBox, renderClues(pz, { cls: clueCls, onRow: (r) => onRowClick(r, null) }));
+      cluesBox.scrollTop = top;
+    }
+
+    // szavazás állása
+    if (st.poll) {
+      const counts = Object.entries(st.poll.counts).map(([r, n]) => [Number(r), n]).sort((a, b) => b[1] - a[1]);
+      const total = counts.reduce((s, [, n]) => s + n, 0);
+      const max = counts[0]?.[1] || 1;
+      fill(pollBox, h('div', { class: 'card poll-card' },
+        h('h3', {}, `🗳 Szavazás — ${total} szavazat`),
+        h('div', { class: 'muted small' }, 'A diákok azt jelölik, melyik kérdést fednéd fel. Csak irányadó: te döntesz (👁 = felfedés).'),
+        counts.length ? h('ol', { class: 'poll-list' }, counts.map(([r, n]) => h('li', {},
+          h('span', { class: 'pl', title: pz.rows[r].clue || '' }, `${entryName(r)}: ${pz.rows[r].clue || ''}`),
+          h('span', { class: 'pbar' }, h('span', { style: { width: `${(100 * n) / max}%` } })),
+          h('strong', {}, n),
+          h('button', { class: 'btn small', title: 'Felfedés mindenkinek', onclick: () => game.revealRow(r) }, '👁'))))
+          : h('p', { class: 'muted' }, 'Még nincs szavazat.')));
+    } else fill(pollBox);
 
     // tanári panel
     teacherPanel.hidden = !teacherPlays || st.status !== 'playing' || st.revealed;

@@ -16,6 +16,17 @@ A tanár gépe a játékvezető: csak ő ismeri a megoldást, a diákok eszköz�
 A pontozás: helyes sor +10, megfejtés +25, helyes tipp a körös módban +2 pont.
 A játék végén az eredmények CSV-ként letölthetők, és Excelben megnyithatók.
 
+### Tanári beállítások (indításkor és játék közben a „⚙ Beállítások” gombbal)
+
+- **Lépcsős pontozás** (verseny mód): egy kérdésért az első megfejtő kapja a legtöbb pontot,
+  minden további X ponttal kevesebbet, de legalább 10-et, akárhány játékos van.
+- **Boostok a diákoknak** (diákonként 0–5 alkalom, játék közben is ki-/bekapcsolhatók):
+  dupla pont a következő helyes kérdésre; első + utolsó betű; pár betű a szó hosszától függően;
+  egy kiválasztott mező betűje. A betűket csak az a diák kapja meg, titkosítva.
+- **Egy kérdés felfedése** minden módban (versenyben is): kattints a kérdésre, majd „👁 … felfedése”.
+- **Szavazás**: a diákok megjelölhetik, melyik kérdést fedje fel a tanár. Csak irányadó, a tanár dönt.
+- A rejtvény a mérettől függetlenül **nagyítható** (−/+, Ctrl+görgő, telefonon csippentés).
+
 ## Fejlesztés
 
 ```bash

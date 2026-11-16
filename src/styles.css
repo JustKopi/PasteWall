@@ -150,11 +150,11 @@ select.input option { background: var(--surface); color: var(--ink); }
 
 /* --- rács --- */
 .cw-grid {
-  --cell: clamp(16px, calc((100vw - 96px) / var(--cols) - 3px), 44px);
+  --cell: calc(clamp(16px, calc((100vw - 96px) / var(--cols) - 3px), 44px) * var(--zoom, 1));
   display: inline-flex; flex-direction: column; gap: 3px; max-width: 100%; overflow-x: auto; padding: 10px 2px 4px;
 }
-.host .cw-grid { --cell: clamp(18px, calc((min(100vw, 1240px) - 440px) / var(--cols) - 3px), 52px); }
-@media (max-width: 900px) { .host .cw-grid { --cell: clamp(16px, calc((100vw - 110px) / var(--cols) - 3px), 44px); } }
+.host .cw-grid { --cell: calc(clamp(18px, calc((min(100vw, 1240px) - 440px) / var(--cols) - 3px), 52px) * var(--zoom, 1)); }
+@media (max-width: 900px) { .host .cw-grid { --cell: calc(clamp(16px, calc((100vw - 110px) / var(--cols) - 3px), 44px) * var(--zoom, 1)); } }
 .cw-row { display: grid; grid-template-columns: 2em repeat(var(--cols), var(--cell)); gap: 3px; align-items: center; border-radius: 8px; position: relative; }
 .cw-row.clickable { cursor: pointer; }
 .cw-row.clickable:hover .cw-cell:not(.empty) { border-color: var(--teal); }
@@ -273,12 +273,12 @@ select.input option { background: var(--surface); color: var(--ink); }
 
 /* --- vegyes irányú rács --- */
 .fw-grid {
-  --cell: clamp(16px, calc((100vw - 70px) / var(--cols) - 3px), 44px);
+  --cell: calc(clamp(16px, calc((100vw - 70px) / var(--cols) - 3px), 44px) * var(--zoom, 1));
   display: inline-grid; grid-template-columns: repeat(var(--cols), var(--cell)); grid-auto-rows: var(--cell);
   gap: 3px; padding: 12px 2px 4px; max-width: 100%; overflow-x: auto;
 }
-.host .fw-grid { --cell: clamp(22px, min(calc((min(100vw, 1240px) - 420px) / var(--cols) - 3px), calc((100vh - 330px) / var(--rowsN) - 3px)), 50px); }
-@media (max-width: 900px) { .host .fw-grid { --cell: clamp(16px, calc((100vw - 90px) / var(--cols) - 3px), 44px); } }
+.host .fw-grid { --cell: calc(clamp(22px, min(calc((min(100vw, 1240px) - 420px) / var(--cols) - 3px), calc((100vh - 330px) / var(--rowsN) - 3px)), 50px) * var(--zoom, 1)); }
+@media (max-width: 900px) { .host .fw-grid { --cell: calc(clamp(16px, calc((100vw - 90px) / var(--cols) - 3px), 44px) * var(--zoom, 1)); } }
 .fw-grid .cw-cell { cursor: default; }
 .fw-grid.rows-clickable .cw-cell:not(.empty) { cursor: pointer; }
 .fw-grid.rows-clickable .cw-cell:not(.empty):hover { border-color: var(--teal); }
@@ -507,3 +507,42 @@ select.input option { background: var(--surface); color: var(--ink); }
 .topbar { display: flex; justify-content: flex-end; align-items: center; gap: 8px; max-width: 1500px; margin: 0 auto; padding: 8px 16px 0; }
 .topbar .btn { padding: 5px 10px; font-size: .9rem; }
 .theme-btn { min-width: 40px; }
+
+/* --- nagyítás --- */
+.zoom-bar { position: sticky; left: 0; display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-bottom: 4px; }
+.zoom-bar .btn { min-width: 2.2em; padding: 2px 8px; }
+.zoom-val { font-variant-numeric: tabular-nums; }
+.grid-card { touch-action: pan-x pan-y; }
+.grid-card .cw-grid, .grid-card .fw-grid { max-width: none; overflow: visible; }
+
+/* --- boostok, felfedés, szavazás --- */
+.cw-cell.hint { color: var(--band3); }
+.cw-cell.hint::before { content: '⚡'; position: absolute; top: 0; right: 1px; font-size: max(7px, calc(var(--cell) * 0.2)); line-height: 1; }
+.boosts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.boosts .btn { display: inline-flex; align-items: center; gap: 4px; }
+.boosts .btn .n { background: var(--inverse); color: var(--on-inverse); border-radius: 99px; padding: 0 6px; font-size: 0.75rem; }
+.boost-on { box-shadow: inset 0 0 0 2px var(--band3); background: var(--soft-purple); }
+.poll-card { border: 2px solid var(--yellow); }
+.poll-card h3 { margin-top: 0; }
+.poll-list { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow: auto; }
+.poll-list li { display: flex; align-items: center; gap: 8px; }
+.poll-list .pbar { flex: 1; height: 10px; background: var(--track); border-radius: 99px; overflow: hidden; min-width: 40px; }
+.poll-list .pbar span { display: block; height: 100%; background: var(--yellow); transition: width .3s; }
+.poll-list .pl { flex: 2; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clues li.voted { box-shadow: inset 3px 0 0 var(--yellow); background: var(--soft-yellow); }
+.clues li .pts { color: var(--muted); font-size: 0.8em; margin-left: 4px; }
+.opts { display: grid; gap: 8px; margin: 10px 0 14px; }
+.opts .check { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.opts .input.tiny { width: 5em; padding: 4px 6px; }
+.opts .boost-opt { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; align-items: center; }
+
+/* --- lábléc: patch note idővonal --- */
+.site-footer { max-width: 1240px; margin: 0 auto; padding: 8px 16px 28px; font-size: 0.85rem; color: var(--muted); }
+.patch-notes summary { cursor: pointer; text-align: center; list-style: none; }
+.patch-notes summary::-webkit-details-marker { display: none; }
+.patch-notes summary:hover { color: var(--ink); }
+.patch-notes[open] summary { margin-bottom: 10px; }
+.timeline { list-style: none; margin: 0 auto; padding: 0 0 0 18px; max-width: 760px; border-left: 2px solid var(--border-strong); color: var(--ink); }
+.timeline > li { position: relative; padding: 0 0 14px 12px; }
+.timeline > li::before { content: ''; position: absolute; left: -26px; top: 3px; width: 12px; height: 12px; border-radius: 50%; background: var(--yellow); border: 2px solid var(--paper); }
+.timeline ul { margin: 4px 0 0; padding-left: 18px; line-height: 1.45; }

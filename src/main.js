@@ -7,6 +7,7 @@ import { hostPage } from './ui/host.js';
 import { miniHostPage } from './ui/minihostpage.js';
 import { gameEditorPage } from './ui/gameeditor.js';
 import { joinPage, playPage } from './ui/play.js';
+import { PATCH_NOTES, VERSION } from './patchnotes.js';
 
 const app = document.getElementById('app');
 
@@ -22,6 +23,14 @@ const themeBtn = h('button', { class: 'btn ghost theme-btn', onclick: () => { co
 setTheme(savedTheme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 export const topbar = h('div', { class: 'topbar' }, themeBtn);
 document.body.insertBefore(topbar, app);
+
+// ---- lábléc: verzió + patch note idővonal ----
+document.body.append(h('footer', { class: 'site-footer' },
+  h('details', { class: 'patch-notes' },
+    h('summary', {}, `PasteWall ${VERSION} · Patch note-ok`),
+    h('ol', { class: 'timeline' }, PATCH_NOTES.map((n) => h('li', {},
+      h('div', { class: 'tl-head' }, h('strong', {}, n.version), h('span', { class: 'muted' }, ` · ${n.date}`), n.title ? ` — ${n.title}` : null),
+      h('ul', {}, n.items.map((it) => h('li', {}, it)))))))));
 let cleanup = null;
 
 function route() {

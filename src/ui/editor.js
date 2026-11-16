@@ -4,6 +4,7 @@ import { generateCrossword, parseEntries } from '../crossword/generator.js';
 import { generateFreeform } from '../crossword/freeform.js';
 import { getPuzzle, savePuzzle, newId } from '../store.js';
 import { createRoom } from '../live/secureroom.js';
+import { gameOptionsUI } from './gameopts.js';
 import { MODES } from '../live/game.js';
 import { TOPICS, testCrossword } from '../games/bank.js';
 
@@ -193,11 +194,13 @@ export function editorPage(root, id) {
     [30, 60, 90, 0].map((s) => h('option', { value: s, selected: s === 60 }, s ? `${s} mp / kör` : 'nincs időkorlát')),
   );
 
+  const opts = gameOptionsUI();
+
   async function startLive() {
     if (!save(true)) return;
     const mode = modeSel.querySelector('input:checked').value;
     const code = await createRoom();
-    sessionStorage.setItem(`pastewall.host.${code}`, JSON.stringify({ puzzleId: doc.id, mode, turnSeconds: Number(turnSel.value) }));
+    sessionStorage.setItem(`pastewall.host.${code}`, JSON.stringify({ puzzleId: doc.id, mode, turnSeconds: Number(turnSel.value), ...opts.value() }));
     location.hash = `#/host/${code}`;
   }
 
@@ -248,6 +251,7 @@ export function editorPage(root, id) {
             h('h3', {}, 'Élő játék indítása'),
             modeSel,
             h('label', { class: 'row-label' }, 'Körös játéknál: ', turnSel),
+            opts.el,
             h('button', { class: 'btn primary big', onclick: startLive }, '▶ Szoba megnyitása'),
           ),
         ),

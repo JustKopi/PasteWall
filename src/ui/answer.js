@@ -25,6 +25,7 @@ export class AnswerController {
     this.selected = null;
     this.cursor = 0;
     this.drafts = new Map(); // row -> string[]
+    this.hints = new Map(); // row -> Map(i -> betű): boostból kapott, zárolt betűk
     this.lastSent = new Map(); // row -> "A|B|C"
     this.pending = null;
     this.autoTimer = null;
@@ -56,8 +57,39 @@ export class AnswerController {
 
   draft(row = this.selected) {
     if (row == null) return [];
-    if (!this.drafts.has(row)) this.drafts.set(row, new Array(this.len(row)).fill(''));
+    if (!this.drafts.has(row)) {
+      const d = new Array(this.len(row)).fill('');
+      for (const [i, t] of this.hints.get(row) || []) d[i] = t;
+      this.drafts.set(row, d);
+    }
     return this.drafts.get(row);
+  }
+
+  isLocked(i, row = this.selected) { return Boolean(row != null && this.hints.get(row)?.has(i)); }
+
+  /** Boostból kapott betűk: beírjuk és zároljuk őket. */
+  addHints(row, letters) {
+    if (!this.hints.has(row)) this.hints.set(row, new Map());
+    const hm = this.hints.get(row);
+    const d = this.draft(row);
+    for (const [i, t] of letters) if (i >= 0 && i < d.length) { hm.set(i, t); d[i] = t; }
+    if (this.selected === row) {
+      if (this.isLocked(this.cursor)) this.cursor = this.nextFree(this.cursor, 1) ?? this.cursor;
+      this.text.value = '';
+      this.syncText();
+      this.render();
+      this.o.onChange();
+      this.scheduleAuto();
+    } else {
+      this.o.onChange();
+    }
+  }
+
+  /** A következő nem zárolt cella indexe az adott irányban (a kiindulót is beleértve), vagy null. */
+  nextFree(from, dir) {
+    const n = this.len(this.selected);
+    for (let k = from; k >= 0 && k < n; k += dir) if (!this.isLocked(k)) return k;
+    return null;
   }
 
   /** Sor kiválasztása; i = a kattintott cella indexe a szón belül. */
@@ -90,11 +122,12 @@ export class AnswerController {
 
   /** A cella-megjelenítéshez: a kijelölt sor vázlata és a kurzor. */
   cellInfo(row, i) {
-    if (row !== this.selected) return null;
+    const hint = this.hints.get(row)?.get(i);
+    if (row !== this.selected) return hint ? { text: hint, cls: 'hint' } : null;
     const t = this.draft(row)[i];
     const cursor = i === this.cursor && document.activeElement === this.cellInput;
     if (!t && !cursor) return null;
-    return { text: t || '', cls: `draft${cursor ? ' cursor' : ''}` };
+    return { text: t || '', cls: `${hint ? 'hint' : 'draft'}${cursor ? ' cursor' : ''}` };
   }
 
   // --- bevitel a cellákba ---
@@ -111,29 +144,31 @@ export class AnswerController {
     const L = this.toUpper(ch);
     if (!/^\p{L}$/u.test(L)) { if (ch === ' ') this.cursor = Math.min(this.cursor + 1, this.len(this.selected) - 1); return; }
     const d = this.draft();
-    const prev = this.cursor > 0 ? d[this.cursor - 1] : '';
-    const atEnd = this.cursor === d.length - 1 && d[this.cursor];
+    const atEnd = this.cursor === d.length - 1 && d[this.cursor] && !this.isLocked(this.cursor);
     // kettős betű: az előző cellával összevonjuk (S + Z -> SZ), ahogy a generátor is bontja
-    const target = atEnd ? this.cursor : this.cursor - 1;
-    const base = atEnd ? d[this.cursor] : prev;
-    if (this.digraphs && base && DIGRAPHS.includes(base + L) && this.lastTypedAt === target) {
+    const target = atEnd ? this.cursor : this.cursor > 0 ? this.nextFree(this.cursor - 1, -1) : null;
+    const base = target != null ? d[target] : '';
+    if (this.digraphs && base && DIGRAPHS.includes(base + L) && this.lastTypedAt === target && !this.isLocked(target)) {
       d[target] = base + L;
       // hosszú kettős mássalhangzó: S, SZ -> SZ, SZ
-      if (target > 0 && d[target - 1] === base[0] && base.length === 1) d[target - 1] = base + L;
+      if (target > 0 && d[target - 1] === base[0] && base.length === 1 && !this.isLocked(target - 1)) d[target - 1] = base + L;
       return;
     }
-    d[this.cursor] = L;
-    this.lastTypedAt = this.cursor;
-    if (this.cursor < d.length - 1) this.cursor++;
+    const at = this.nextFree(this.cursor, 1); // a boostból kapott (zárolt) betűket átugorjuk
+    if (at == null) return;
+    d[at] = L;
+    this.lastTypedAt = at;
+    this.cursor = at;
+    if (at < d.length - 1) this.cursor = this.nextFree(at + 1, 1) ?? at;
   }
 
   backspace() {
     const d = this.draft();
-    if (d[this.cursor]) {
+    if (d[this.cursor] && !this.isLocked(this.cursor)) {
       d[this.cursor] = ''; // a kurzor alatti betű törlése
     } else if (this.cursor > 0) {
-      this.cursor--; // üres cellán: vissza egyet és azt töröljük
-      d[this.cursor] = '';
+      const k = this.nextFree(this.cursor - 1, -1); // üres cellán: vissza az előző (nem zárolt) cellára
+      if (k != null) { this.cursor = k; d[k] = ''; }
     }
     this.lastTypedAt = null;
   }
@@ -152,7 +187,7 @@ export class AnswerController {
       this.submit(false);
     } else if (e.key === 'Delete') {
       e.preventDefault();
-      d[this.cursor] = '';
+      if (!this.isLocked(this.cursor)) d[this.cursor] = '';
       this.changed(true);
     } else if (e.key === 'Escape') {
       this.cellInput.blur();
@@ -163,9 +198,13 @@ export class AnswerController {
   fromText() {
     if (this.selected == null) return;
     const L = this.len(this.selected);
-    const toks = tokenize(this.text.value, { digraphs: this.digraphs }).slice(0, L);
+    // "_" = üres cella (így a kapott betűk a helyükön maradnak)
+    const toks = this.text.value.split('_')
+      .flatMap((seg, k) => [...(k ? [''] : []), ...tokenize(seg, { digraphs: this.digraphs })])
+      .slice(0, L);
     const d = new Array(L).fill('');
     toks.forEach((t, i) => { d[i] = t; });
+    for (const [i, t] of this.hints.get(this.selected) || []) d[i] = t; // a kapott betűk maradnak
     this.drafts.set(this.selected, d);
     this.cursor = Math.min(toks.length, L - 1);
     this.changed(false);
@@ -173,7 +212,10 @@ export class AnswerController {
 
   syncText() {
     if (document.activeElement === this.text) return;
-    this.text.value = this.selected == null ? '' : this.draft().map((t) => t || '').join('');
+    // üres cella helyén "_", hogy a kapott (boost) betűk a helyükön látszódjanak
+    const d = this.selected == null ? [] : this.draft();
+    const last = d.reduce((m, t, i) => (t ? i : m), -1);
+    this.text.value = d.slice(0, last + 1).map((t) => t || '_').join('');
   }
 
   toUpper(ch) { return ch.toLocaleUpperCase('hu-HU'); }
@@ -192,7 +234,7 @@ export class AnswerController {
     const row = this.selected;
     this.typingTimer = setTimeout(() => {
       if (row !== this.selected || !this.o.canAnswer()) return;
-      this.o.onTyping(row, this.draft(row).map((t) => t || ''));
+      this.o.onTyping(row, this.draft(row).map((t, i) => (this.isLocked(i, row) ? '' : t || '')));
     }, 100);
   }
 
@@ -230,6 +272,7 @@ export class AnswerController {
     if (this.pending === row) this.pending = null;
     if (correct) {
       this.drafts.delete(row);
+      this.hints.delete(row);
       if (this.selected === row) { this.selected = null; this.text.value = ''; this.cellInput.blur(); }
     } else if (this.selected === row) {
       this.el.classList.remove('shake'); void this.el.offsetWidth; this.el.classList.add('shake');
@@ -245,6 +288,7 @@ export class AnswerController {
     this.selected = null;
     this.cursor = 0;
     this.drafts.clear();
+    this.hints.clear();
     this.lastSent.clear();
     this.pending = null;
     this.text.value = '';

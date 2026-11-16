@@ -132,7 +132,7 @@ export class GridView {
   }
 }
 
-const PRIORITY = ['solved', 'revealed', 'draft', 'ghost'];
+const PRIORITY = ['solved', 'revealed', 'hint', 'draft', 'ghost'];
 const rank = (cls) => { const i = PRIORITY.findIndex((p) => new RegExp(`\\b${p}\\b`).test(cls || '')); return i === -1 ? 99 : i; };
 
 /**
@@ -232,6 +232,54 @@ export class FreeGridView {
       if (tag) { T.el.textContent = tag.name; T.el.style.background = tag.color; }
     });
   }
+}
+
+const ZOOM_MIN = 0.5;
+const ZOOM_MAX = 3;
+const ZOOMS = [0.5, 0.6, 0.75, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5, 3];
+
+/**
+ * Nagyítás a rejtvényhez, a rács méretétől függetlenül: −/+ gomb, Ctrl+görgő, telefonon két ujjas csippentés.
+ * A `target` elemen a --zoom CSS-változót állítja (a cellaméret ezzel szorzódik).
+ * @returns {HTMLElement} a gombsor
+ */
+export function zoomBar(target, key) {
+  const store = `pastewall.zoom.${key}`;
+  let z = Number(localStorage.getItem(store)) || 1;
+  const clamp = (v) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, v));
+  const label = h('button', { class: 'btn ghost small zoom-val', type: 'button', title: 'Vissza 100%-ra', onclick: () => set(1) });
+  function set(v) {
+    z = Math.round(clamp(v) * 100) / 100;
+    target.style.setProperty('--zoom', String(z));
+    label.textContent = `${Math.round(z * 100)}%`;
+    localStorage.setItem(store, String(z));
+  }
+  const step = (d) => {
+    let i = d > 0 ? ZOOMS.findIndex((x) => x > z + 0.001) : ZOOMS.findLastIndex((x) => x < z - 0.001);
+    if (i === -1) i = d > 0 ? ZOOMS.length - 1 : 0;
+    set(ZOOMS[i]);
+  };
+  target.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    step(e.deltaY < 0 ? 1 : -1);
+  }, { passive: false });
+  // két ujjas csippentés (a böngésző saját oldalnagyítása helyett csak a rács nő)
+  let pinch = null;
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  target.addEventListener('touchstart', (e) => { if (e.touches.length === 2) pinch = { d: dist(e.touches), z }; }, { passive: true });
+  target.addEventListener('touchmove', (e) => {
+    if (!pinch || e.touches.length !== 2) return;
+    e.preventDefault();
+    set(pinch.z * (dist(e.touches) / pinch.d));
+  }, { passive: false });
+  target.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
+  set(z);
+  return h('div', { class: 'zoom-bar' },
+    h('span', { class: 'muted small' }, '🔍'),
+    h('button', { class: 'btn ghost small', type: 'button', title: 'Kicsinyítés', onclick: () => step(-1) }, '−'),
+    label,
+    h('button', { class: 'btn ghost small', type: 'button', title: 'Nagyítás', onclick: () => step(1) }, '+'));
 }
 
 export function makeGridView(pub, opts) {
